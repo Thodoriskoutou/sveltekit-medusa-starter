@@ -1,3 +1,5 @@
+# NOTE: This client library is for Medusa v1.  A new SvelteKit SDK built for Medusa v2 is [in development](https://www.npmjs.com/package/sveltekit-medusa-sdk).  Once complete, a new example storefront using the sdk will be released.
+
 # SvelteKit eCommerce Store Starter App for MedusaJS
 
 ![Preview](https://github.com/pevey/sveltekit-medusa-starter/assets/7490308/e2b4fa4e-eb31-4082-aba3-b1cc26044ca0)
