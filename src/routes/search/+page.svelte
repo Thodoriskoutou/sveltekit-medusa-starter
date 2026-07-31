@@ -1,40 +1,32 @@
-<script>
-   import SEO from '$lib/components/SEO.svelte'
-   import { queryParam } from 'sveltekit-search-params'
-   import { enhance } from '$app/forms'
-   
-   export let data
-   let hits = data?.hits || []
+<script lang="ts">
+	// Full-page search. `Search.Results static` lays results out in flow rather than as
+	// the floating dropdown the navbar's SearchBox uses, and `query` seeds the term from
+	// the URL so /search?q=… works on load and on client-side navigation.
+	//
+	// Requires medusa-plugin-search on the backend; without it the results stay empty.
+	import { page } from '$app/state'
+	import * as Search from '$lib/components/ui/search'
+	import type { SearchHit } from '$lib/components/ui/search/ctx.svelte.js'
+	import { Metadata } from '$lib/components/ui/seo'
 
-   const q = queryParam('q')
-   let searchForm
+	const q = $derived(page.url.searchParams.get('q') ?? '')
+
+	// The registry routes hits at /categories/… and /collections/…; this app uses the
+	// singular forms, so map them here.
+	function hitHref(hit: SearchHit) {
+		if (hit.type === 'category') return `/category/${hit.slug}`
+		if (hit.type === 'collection') return `/collection/${hit.slug}`
+		return `/product/${hit.slug}`
+	}
 </script>
 
-<SEO title="Search" />
+<Metadata config={{ title: q ? `Search: ${q}` : 'Search', noindex: true }} />
 
-<div class="max-w-screen-2xl mx-auto my-8 px-6 md:px-8">
-   <form bind:this={searchForm} action="/search?/search" method="POST" use:enhance={ async ({ cancel }) => {
-      if (!$q) cancel()
-      return async ({ result }) => {
-         if (result.status === 200) {
-            if (result.data.hits !== hits) {
-               hits = result.data.hits
-            }
-         } 
-      }}}>
-      <label for="q" class="sr-only">Search</label>
-      <input type="search" name="q" id="q" bind:value={$q} on:input={() => searchForm.requestSubmit()} class="w-full block py-3 px-4 text-sm border border-gray-200 rounded-lg text-gray-700 placeholder-gray-400 focus:border-gray-500 focus:outline-none focus:ring-gray-500" aria-label="Search" />
-   </form>
-   {#each hits as hit}
-      <button on:click={async () => { $q = '';  window.location.href = `/product/${hit.handle}` }} class="overflow-hidden text-left cursor-pointer hover:bg-stone-100 p-4">
-         <h3 class="font-bold">{hit.title}</h3>
-         <p class="text-sm line-clamp-4">{hit.description}</p>
-      </button>
-   {:else}
-      {#if $q}
-      <p>No results found.</p>
-      {:else}
-      <p>Enter a search term.</p>
-      {/if}
-   {/each}
-</div>
+<section class="mx-auto max-w-3xl px-4 py-12">
+	<h1 class="text-3xl font-semibold tracking-tight">Search</h1>
+
+	<Search.Root query={q} class="mt-6">
+		<Search.Input placeholder="Search products…" />
+		<Search.Results static href={hitHref} class="mt-6" />
+	</Search.Root>
+</section>

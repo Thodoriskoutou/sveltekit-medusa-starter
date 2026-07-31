@@ -1,20 +1,28 @@
 <script lang="ts">
-   import '$src/app.postcss'
-   import type { PageData } from './$types'
-   import { page } from '$app/stores'
-   import NavBar from '$lib/components/NavBar.svelte'
-   import Footer from '$lib/components/Footer.svelte'
-   export let data: PageData
-   const nakedPaths = ['/auth', '/checkout', '/sitemap.xml']
-   $: naked = nakedPaths.includes($page.url.pathname)
-   $: user = data?.user
-   $: cart = data?.cart
-   $: count = cart?.items?.length || null
+	import './layout.css'
+	import { ModeWatcher } from 'mode-watcher'
+	import { SITE_NAME, SITE_URL } from '$app/env/public'
+	import { MetaProvider } from '$lib/components/ui/seo'
+	import * as Auth from '$lib/components/ui/auth'
+	import Navbar from '$lib/components/Navbar.svelte'
+	import Footer from '$lib/components/Footer.svelte'
+
+	let { children } = $props()
 </script>
-{#if naked}
-   <slot />
-{:else}
-   <NavBar bind:user={user} bind:cart={cart} bind:count={count} />
-   <slot />
-   <Footer />
-{/if}
+
+<!-- Keeps the `.dark` class on <html> in sync with the visitor's preference. -->
+<ModeWatcher />
+
+<!-- Site-wide SEO defaults; each page overrides them with <Metadata config={...} />. -->
+<MetaProvider site={{ siteName: SITE_NAME, siteUrl: SITE_URL, titleTemplate: `%s | ${SITE_NAME}` }}>
+	<div class="flex min-h-screen flex-col">
+		<Navbar />
+		<main class="flex-1">
+			{@render children()}
+		</main>
+		<Footer />
+	</div>
+
+	<!-- Opens on ?auth=login|register|forgot|reset. Mount once, here. -->
+	<Auth.Dialog />
+</MetaProvider>

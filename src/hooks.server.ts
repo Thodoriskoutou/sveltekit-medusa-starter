@@ -1,26 +1,17 @@
-import type { Handle } from '@sveltejs/kit'
-import medusa from '$lib/server/medusa'
+import { createMedusaHandle } from 'sveltekit-medusa-sdk/server'
+import { MEDUSA_BACKEND_URL, MEDUSA_PUBLISHABLE_KEY, MEDUSA_DEFAULT_REGION_ID, MEDUSA_DEFAULT_COUNTRY_CODE } from '$app/env/private'
 
-export const handle: Handle = async ({ event, resolve }) => {
-
-   // MEDUSA SESSION MIDDLEWARE  
-   // Sets locals.user and locals.cart if they are found.
-   event = await medusa.handleRequest(event)
-
-   const response = await resolve(event)
-
-   // CACHE CONTROL	
-   // response.headers.set['Cache-Control'] = 'no-store, no-cache, must-revalidate, proxy-revalidate'
-   // response.headers.set['Cache-Control'] = 'public, max-age=0, s-maxage=1'
-   
-   // SECURITY HEADERS
-   // CSP directives are set elsewhere in svelte.config.js and added automatically by SvelteKit.
-   // CSRF mitigation in SvelteKit is handled by header-checking and is enabled by default. More secure token-based CSRF mitigation must be added manually.
-   // Token-based CSRF mitigation for the most sensitive endpoints/form actions is handled by Cloudflare Turnstile.
-   response.headers.set('X-Frame-Options', 'DENY')
-   response.headers.set('X-Content-Type-Options', 'nosniff')
-   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
-   response.headers.set('Permissions-Policy', 'payment=(self "https://js.stripe.com/"), accelerometer=(), camera=(), display-capture=(), encrypted-media=(), fullscreen=(), gyroscope=(), hid=(), interest-cohort=(), magnetometer=(), microphone=(), midi=(), picture-in-picture=(), publickey-credentials-get=(), sync-xhr=(), usb=(), xr-spatial-tracking=(), geolocation=()')
-
-   return response
-}
+/**
+ * Configures the Medusa client once, per request. Everything else — cart, session,
+ * region and country resolution — is handled by the SDK's remote functions, which
+ * resolve the same context on their own.
+ *
+ * See the SDK docs for the full option list (cookie names, `transferCartOnLogin`,
+ * affiliate tracking, analytics headers).
+ */
+export const handle = createMedusaHandle({
+	baseUrl: MEDUSA_BACKEND_URL,
+	publishableKey: MEDUSA_PUBLISHABLE_KEY,
+	defaultRegionId: MEDUSA_DEFAULT_REGION_ID || undefined,
+	defaultCountryCode: MEDUSA_DEFAULT_COUNTRY_CODE || undefined
+})
