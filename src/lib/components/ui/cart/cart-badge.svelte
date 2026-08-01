@@ -13,7 +13,7 @@
 		<span
 			data-cart-badge
 			class={cn(
-				'absolute -top-1 -right-1 inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-xs leading-none font-bold text-primary-foreground',
+				'bg-primary text-primary-foreground absolute -top-1 -right-1 inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-xs leading-none font-bold',
 				className
 			)}>{value}</span
 		>

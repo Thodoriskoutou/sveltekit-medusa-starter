@@ -50,18 +50,18 @@
 		role={comboboxMode ? 'listbox' : undefined}
 		id={comboboxMode ? state.listboxId : undefined}
 		aria-label={comboboxMode ? 'Search results' : undefined}
-		class={cn(isStatic ? '' : 'absolute z-50 max-h-[80vh] w-full overflow-auto rounded-b-md border bg-popover text-popover-foreground', className)}
+		class={cn(isStatic ? '' : 'bg-popover text-popover-foreground absolute z-50 max-h-[80vh] w-full overflow-auto rounded-b-md border', className)}
 	>
 		{#if state.loading && state.hits.length === 0}
-			<p class="p-4 text-sm text-muted-foreground">Searching…</p>
+			<p class="text-muted-foreground p-4 text-sm">Searching…</p>
 		{:else if !showQuery}
 			{#if isStatic}
-				<p class="p-4 text-sm text-muted-foreground">
+				<p class="text-muted-foreground p-4 text-sm">
 					Type at least {state.minLength} characters…
 				</p>
 			{/if}
 		{:else if state.hits.length === 0}
-			<p class="p-4 text-sm text-muted-foreground">No results found.</p>
+			<p class="text-muted-foreground p-4 text-sm">No results found.</p>
 		{:else}
 			{#each state.sections as section, si (section.label ?? '__products__')}
 				{#if section.label === null}
@@ -71,7 +71,7 @@
 				{:else}
 					{@const headingId = `${state.baseId}-group-${si}`}
 					<div role={comboboxMode ? 'group' : undefined} aria-labelledby={comboboxMode ? headingId : undefined}>
-						<div id={comboboxMode ? headingId : undefined} class="px-4 pt-3 pb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+						<div id={comboboxMode ? headingId : undefined} class="text-muted-foreground px-4 pt-3 pb-1 text-xs font-semibold tracking-wide uppercase">
 							{section.label}
 						</div>
 						{#each section.items as item (item.hit.type + item.hit.id)}

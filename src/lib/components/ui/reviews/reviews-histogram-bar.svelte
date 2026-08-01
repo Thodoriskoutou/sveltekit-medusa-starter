@@ -19,13 +19,13 @@
 >
 	{#if children}{@render children()}{/if}
 	{#if vertical}
-		<span class="relative h-24 w-4 flex-1 overflow-hidden rounded bg-muted">
+		<span class="bg-muted relative h-24 w-4 flex-1 overflow-hidden rounded">
 			<span class="absolute inset-x-0 bottom-0 bg-yellow-400" style={`height:${pct}`}></span>
 		</span>
 	{:else}
-		<span class="relative h-2 flex-1 overflow-hidden rounded bg-muted">
+		<span class="bg-muted relative h-2 flex-1 overflow-hidden rounded">
 			<span class="absolute inset-y-0 left-0 bg-yellow-400" style={`width:${pct}`}></span>
 		</span>
 	{/if}
-	<span class="w-8 text-right text-xs text-muted-foreground">{lvl.count}</span>
+	<span class="text-muted-foreground w-8 text-right text-xs">{lvl.count}</span>
 </button>

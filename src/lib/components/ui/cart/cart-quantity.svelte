@@ -32,7 +32,7 @@
 	}
 </script>
 
-<div class={cn('inline-flex h-9 items-center rounded-full border border-input', className)} role="group" aria-label="Quantity stepper" data-cart-quantity>
+<div class={cn('border-input inline-flex h-9 items-center rounded-full border', className)} role="group" aria-label="Quantity stepper" data-cart-quantity>
 	<Button variant="ghost" size="icon" class="size-8 rounded-full" disabled={disabled || item.quantity <= min} onclick={() => commit(item.quantity - 1)}>
 		<MinusIcon /><span class="sr-only">Decrease quantity</span>
 	</Button>

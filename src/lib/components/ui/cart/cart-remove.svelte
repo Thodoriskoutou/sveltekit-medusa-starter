@@ -10,7 +10,7 @@
 <button
 	type="button"
 	data-cart-remove
-	class={cn('text-sm text-muted-foreground hover:text-foreground disabled:opacity-50', className)}
+	class={cn('text-muted-foreground hover:text-foreground text-sm disabled:opacity-50', className)}
 	disabled={ctx.pending}
 	onclick={() => ctx.removeItem(item.id)}
 >

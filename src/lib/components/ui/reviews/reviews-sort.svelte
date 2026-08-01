@@ -15,7 +15,7 @@
 	<label class={cn('inline-flex items-center gap-2 text-sm', className)}>
 		<span>Sort by:</span>
 		<select
-			class="rounded-md border border-input bg-background px-2 py-1"
+			class="border-input bg-background rounded-md border px-2 py-1"
 			value={ctx.order}
 			onchange={e => ctx.setOrder((e.currentTarget as HTMLSelectElement).value)}
 		>

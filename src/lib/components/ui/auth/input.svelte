@@ -25,7 +25,7 @@
 		<button
 			type="button"
 			tabindex={-1}
-			class="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground"
+			class="text-muted-foreground absolute inset-y-0 right-0 flex items-center pr-3"
 			aria-label={reveal ? 'Hide' : 'Show'}
 			onclick={() => (reveal = !reveal)}
 		>

@@ -126,3 +126,7 @@
 		@apply bg-background text-foreground;
 	}
 }
+
+.grow-on-hover {
+	@apply transition ease-in-out hover:-translate-y-1 hover:scale-110;
+}

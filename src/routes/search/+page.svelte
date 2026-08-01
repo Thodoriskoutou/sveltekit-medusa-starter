@@ -1,7 +1,7 @@
 <script lang="ts">
-	// Full-page search. `Search.Results static` lays results out in flow rather than as
-	// the floating dropdown the navbar's SearchBox uses, and `query` seeds the term from
-	// the URL so /search?q=… works on load and on client-side navigation.
+	// Full-page search. `Search.Results static` lays results out in flow rather than as a
+	// floating dropdown, and `query` seeds the term from the URL so /search?q=… works on
+	// load and on client-side navigation.
 	//
 	// Requires medusa-plugin-search on the backend; without it the results stay empty.
 	import { page } from '$app/state'

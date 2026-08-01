@@ -17,7 +17,7 @@
 	<Customer.SignedOut>
 		<p class="mt-6 text-muted-foreground">You are not signed in.</p>
 		<div class="mt-4">
-			<Customer.SignInButton />
+			<Customer.SignIn />
 		</div>
 	</Customer.SignedOut>
 

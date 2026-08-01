@@ -18,13 +18,13 @@
 
 <svelte:boundary>
 	{#snippet pending()}
-		<div class="mx-auto max-w-6xl px-4 py-12 text-muted-foreground">Loading…</div>
+		<div class="text-muted-foreground mx-auto max-w-6xl px-4 py-12">Loading…</div>
 	{/snippet}
 
 	{#snippet failed(error)}
 		<div class="mx-auto max-w-6xl px-4 py-12">
 			<h1 class="text-2xl font-semibold">Product unavailable</h1>
-			<p class="mt-2 text-muted-foreground">{error instanceof Error ? error.message : 'Please try again.'}</p>
+			<p class="text-muted-foreground mt-2">{error instanceof Error ? error.message : 'Please try again.'}</p>
 		</div>
 	{/snippet}
 
@@ -54,7 +54,7 @@
 
 				<div>
 					<Product.Title class="text-3xl font-semibold tracking-tight" />
-					<Product.Subtitle class="mt-1 text-muted-foreground" />
+					<Product.Subtitle class="text-muted-foreground mt-1" />
 					<Product.Rating class="mt-3" />
 					<Product.Price class="mt-4 block text-2xl" />
 
@@ -69,10 +69,10 @@
 
 					<div class="mt-8 flex items-center gap-3">
 						<Product.QuantitySelect />
-						<AddToCartButton class="flex-1" />
+						<AddToCartButton size="lg" />
 					</div>
 
-					<Product.Description class="prose prose-neutral mt-8 dark:prose-invert" />
+					<Product.Description class="prose prose-neutral dark:prose-invert mt-8" />
 				</div>
 			</div>
 		</Product.Root>

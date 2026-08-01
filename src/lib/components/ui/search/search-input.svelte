@@ -51,7 +51,7 @@
 </script>
 
 <div class="relative">
-	<div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-muted-foreground">
+	<div class="text-muted-foreground pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
 		{#if icon}
 			<Icon class="size-4">{@render icon()}</Icon>
 		{:else}

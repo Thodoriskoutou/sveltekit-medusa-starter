@@ -4,6 +4,6 @@
 	let { class: className = '', children }: { class?: string; children?: Snippet } = $props()
 </script>
 
-<p data-cart-empty class={cn('py-6 text-sm text-muted-foreground', className)}>
+<p data-cart-empty class={cn('text-muted-foreground py-6 text-sm', className)}>
 	{#if children}{@render children()}{:else}Your cart is empty{/if}
 </p>

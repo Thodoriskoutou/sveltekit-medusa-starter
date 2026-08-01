@@ -6,4 +6,4 @@
 	const ctx = getPageNavContext()
 </script>
 
-<span data-page-nav-info class={cn('px-2 text-sm text-muted-foreground', className)}>Page {ctx.page + 1} of {ctx.pageCount}</span>
+<span data-page-nav-info class={cn('text-muted-foreground px-2 text-sm', className)}>Page {ctx.page + 1} of {ctx.pageCount}</span>

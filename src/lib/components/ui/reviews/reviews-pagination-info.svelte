@@ -7,4 +7,4 @@
 	const total = $derived(pageCount(ctx.filteredCount, ctx.pageSize))
 </script>
 
-<span class={cn('text-sm text-muted-foreground', className)}>Page {ctx.page + 1} of {total}</span>
+<span class={cn('text-muted-foreground text-sm', className)}>Page {ctx.page + 1} of {total}</span>

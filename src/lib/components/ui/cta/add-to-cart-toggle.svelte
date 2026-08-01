@@ -55,7 +55,7 @@
 			{@render children({ on, pending, disabled, toggle })}
 		{:else}
 			<label class={cn('flex items-center gap-2', className)}>
-				<input type="checkbox" class="size-4 rounded-sm border-input accent-primary disabled:opacity-50" checked={on} {disabled} onchange={toggle} />
+				<input type="checkbox" class="border-input accent-primary size-4 rounded-sm disabled:opacity-50" checked={on} {disabled} onchange={toggle} />
 				<span class="text-sm">{on ? 'Added' : 'Add to cart'}</span>
 			</label>
 		{/if}
