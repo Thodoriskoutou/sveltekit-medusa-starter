@@ -33,7 +33,11 @@ export default defineConfig({
 		})
 	],
 	optimizeDeps: {
-		include: ['qs'] // needed for shadcn-svelte
+		include: ['qs'], // needed for shadcn-svelte
+		// Don't prebundle the SDK. Its `.remote.js` files are imported as bare subpaths
+		// (`sveltekit-medusa-sdk/auth`, …) and SvelteKit externalizes remote files during
+		// prebundling, which fails with "Entry module … cannot be external".
+		exclude: ['sveltekit-medusa-sdk']
 	},
 	ssr: {
 		// Treat the SDK as internal to the app so `$app/server` resolves inside it, and
