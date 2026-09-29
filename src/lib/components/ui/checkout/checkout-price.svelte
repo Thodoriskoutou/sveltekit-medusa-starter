@@ -1,10 +1,12 @@
 <script lang="ts">
 	import { cn } from '$lib/utils.js'
-	import { getCheckoutLineContext } from './ctx.svelte.js'
+	import { getCheckoutLineContext, getCheckoutContextOptional } from './ctx.svelte.js'
 	import { formatPrice } from './format-price.js'
 	let { class: className = '', locale = 'en-US' }: { class?: string; locale?: string } = $props()
 	const { item } = getCheckoutLineContext()
-	const currencyCode = $derived((item as { currency_code?: string }).currency_code ?? 'usd')
+	// Medusa line items carry no currency of their own — fall back to the cart's, not USD.
+	const checkout = getCheckoutContextOptional()
+	const currencyCode = $derived((item as { currency_code?: string }).currency_code ?? checkout?.cart?.currency_code ?? 'usd')
 	const formatted = $derived(formatPrice(item.unit_price, currencyCode, locale))
 </script>
 

@@ -8,18 +8,42 @@ Fork or clone it as the starting point for your own store. It is deliberately sm
 
 ## What's included
 
-| Route                | What it does                                                     |
-| -------------------- | ---------------------------------------------------------------- |
-| `/`                  | Category grid                                                     |
-| `/category/[slug]`   | Paginated product listing for a category                          |
-| `/collection/[slug]` | Paginated product listing for a collection                        |
-| `/product/[slug]`    | Gallery, variant options, quantity, add to cart, JSON-LD          |
-| `/search`            | Full-page search (requires `medusa-plugin-search`)                |
-| `/checkout`          | Stripe checkout — address, shipping, payment                      |
-| `/checkout/return`   | Stripe redirect target; completes the order                       |
-| `/account`           | Profile and order history, sign in / out                          |
+This copy of the starter carries the **Wild Coral** front end (ported from the `wireframe-sveltekit`
+design): its header, mega menu, footer, typography and pages, running on live Medusa data. The
+registry components in `src/lib/components/ui` still do the heavy lifting for checkout and sign-in;
+they are re-themed through the design tokens in `src/routes/layout.css` (square corners, near-black
+primary), so they match the rest of the site.
 
-Cart lives in a drawer in the navbar, and sign-in is a dialog driven by `?auth=login`, so neither needs its own route.
+| Route                | What it does                                                                                   |
+| -------------------- | ---------------------------------------------------------------------------------------------- |
+| `/`                  | Home: hero, featured styles, "shop the look", new arrivals (newest Medusa products)             |
+| `/shop`              | Product grid with category filter (`/shop?category=<handle>`; menu links come from Medusa)      |
+| `/product/[handle]`  | Gallery, color/size options, live stock, add to cart, SEO metadata + JSON-LD                    |
+| `/search`            | Full-page search using the Store API's `q` filter (no search plugin needed)                     |
+| `/cart`              | Cart with quantity, remove and coupon codes                                                     |
+| `/checkout`          | Region-driven checkout (Stripe or Braintree) inside the Wild Coral page chrome                  |
+| `/checkout/return`   | Stripe redirect target; completes the order                                                     |
+| `/success`           | Order confirmation, shown after checkout with the order that was just placed                    |
+| `/account`           | Sign in / register, order history, profile, saved addresses                                     |
+| `/journal`, `/customer-care`, `/components`, `/system` | Editorial and design-system pages from the wireframe (static content)         |
+| `/category/[slug]`, `/collection/[slug]` | The starter's registry listings (unchanged)                                 |
+
+Sign-in is also available as a dialog driven by `?auth=login`. Cart lives on its own `/cart` page; the header shows the item count.
+
+**Medusa setup the storefront expects** — the publishable key needs a sales channel; products need
+options titled `Color` and `Size` (swatch colors are looked up by name in `src/lib/medusa/catalog.ts`),
+EUR prices, images, and stock at a location linked to the sales channel; the region needs Stripe (or
+Braintree) enabled for `/checkout` to appear. Checkout shows a "payment is being set up" message
+until then.
+
+**Product videos** — Medusa's admin uploads images only, so videos are attached in the product's
+*Metadata* (Products → product → Metadata): a `video` key holding an MP4/WebM URL, `video_2`,
+`video_3`, … for more (or one `videos` key with several URLs separated by commas). URLs can be
+absolute (a CDN) or site-relative (`/videos/clip.mp4`, from `static/videos/`). Videos come first in
+the gallery and on shop/home cards, play muted and looping while on screen, and use the product's
+photo as the poster. Always keep one still image as the product's *Thumbnail* — the cart, checkout
+and search/social previews need it. Video URLs among a product's media are also detected
+automatically (`src/lib/medusa/catalog.ts`).
 
 ## Requirements
 

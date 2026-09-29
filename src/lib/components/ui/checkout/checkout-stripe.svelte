@@ -3,7 +3,9 @@
 	import type { StoreOrder } from '@medusajs/types'
 	// Provider-agnostic checkout address form — shared by every payment provider.
 	// Stripe's provider-specific work happens at the `authorizePayment` seam, not here.
-	import { checkoutForm } from 'sveltekit-medusa-sdk'
+	// sveltekit-medusa-sdk@2.18.0 ships this generic address form as `braintreeCheckoutForm` (it is not
+	// Braintree-specific); newer registry code refers to it as `checkoutForm`.
+	import { braintreeCheckoutForm as checkoutForm } from 'sveltekit-medusa-sdk'
 	import Root from './checkout.svelte'
 	import Body from './checkout-stripe-body.svelte'
 

@@ -1,7 +1,9 @@
 <script lang="ts">
 	import type { RemoteForm } from '@sveltejs/kit'
 	import type { StoreOrder } from '@medusajs/types'
-	import { checkoutForm } from 'sveltekit-medusa-sdk'
+	// sveltekit-medusa-sdk@2.18.0 ships this generic address form as `braintreeCheckoutForm` (it is not
+	// Braintree-specific); newer registry code refers to it as `checkoutForm`.
+	import { braintreeCheckoutForm as checkoutForm } from 'sveltekit-medusa-sdk'
 	import Root from './checkout.svelte'
 	import Body from './checkout-braintree-body.svelte'
 

@@ -1,30 +1,98 @@
 <script lang="ts">
-	// Stripe checkout (Elements mode).
+	// Checkout: the Wild Coral page chrome around the registry's region-driven checkout.
 	//
-	// `CheckoutStripe` owns the whole flow: address form → shipping options →
-	// payment session → confirm → complete cart → redirect. The address form it uses
-	// is the SDK's provider-agnostic `checkoutForm`.
+	// `CheckoutAuto` owns the whole flow — address form → delivery → payment session → confirm →
+	// complete cart → redirect — and picks the payment UI from the cart region's provider (Stripe or
+	// Braintree). This page adds the empty / not-configured states around it and sends the shopper
+	// to /success when the order is placed.
 	//
-	// `returnUrl` MUST point at this app's /checkout/return route — Stripe requires it
-	// even when confirmation happens without a redirect.
-	import { STRIPE_KEY, STRIPE_REDIRECT_URL } from '$app/env/public'
-	import { CheckoutStripe } from '$lib/components/ui/checkout'
-	import { Metadata } from '$lib/components/ui/seo'
+	// `returnUrl` MUST point at this app's /checkout/return route — Stripe requires it even when
+	// confirmation happens without a redirect.
+	import { STRIPE_KEY, STRIPE_REDIRECT_URL } from '$app/env/public';
+	import { getCart } from 'sveltekit-medusa-sdk';
+	import { CheckoutAuto, resolveCheckoutProvider } from '$lib/components/ui/checkout';
+	import { Metadata } from '$lib/components/ui/seo';
+	import { safe } from '$lib/medusa/safe';
+	import { rememberOrder } from '$lib/medusa/order-summary';
+	import { dev } from '$app/env';
+
+	const cartResult = $derived(await safe(async () => await getCart()));
+	const cart = $derived(cartResult.data);
+
+	const providerIds = $derived(
+		((cart?.region?.payment_providers ?? []) as { id: string }[]).map((p) => p.id)
+	);
+	const provider = $derived(resolveCheckoutProvider(providerIds));
 </script>
 
 <Metadata config={{ title: 'Checkout', noindex: true }} />
 
-<section class="mx-auto max-w-3xl px-4 py-12">
-	<h1 class="text-3xl font-semibold tracking-tight">Checkout</h1>
+<div class="bg-white min-h-screen">
+	<div class="border-b border-gray-200 bg-white sticky top-[72px] z-30">
+		<div class="max-w-7xl mx-auto px-8 md:px-16 lg:px-24 py-6">
+			<div class="flex items-center justify-between">
+				<h1 class="text-2xl font-serif">Secure Checkout</h1>
+				<a href="/cart" class="text-sm underline hover:opacity-70 transition-opacity">Return to Cart</a>
+			</div>
 
-	{#if !STRIPE_KEY}
-		<p class="mt-6 rounded-md border border-dashed p-6 text-muted-foreground">
-			Set <code>STRIPE_KEY</code> and <code>STRIPE_REDIRECT_URL</code> in your <code>.env</code> to enable checkout. Your Medusa region also needs the
-			Stripe payment provider enabled.
-		</p>
-	{:else}
-		<div class="mt-8">
-			<CheckoutStripe publishableKey={STRIPE_KEY} returnUrl={STRIPE_REDIRECT_URL} />
+			<div class="flex items-center space-x-3 text-sm mt-4">
+				<span class="text-gray-400">Selection</span>
+				<span class="text-gray-400">→</span>
+				<span class="font-medium">Information &amp; Payment</span>
+			</div>
 		</div>
-	{/if}
-</section>
+	</div>
+
+	<div class="max-w-7xl mx-auto px-4 md:px-8 lg:px-16 xl:px-24 py-16">
+		{#if cartResult.error}
+			<div class="max-w-xl mx-auto text-center py-16">
+				<h2 class="text-2xl font-serif mb-4">Checkout is unavailable right now</h2>
+				<p class="text-sm text-gray-600">{dev ? cartResult.error : 'Please try again in a moment.'}</p>
+			</div>
+		{:else if !cart || (cart.items?.length ?? 0) === 0}
+			<div class="max-w-xl mx-auto text-center py-16 border-2 border-gray-200 p-16">
+				<h2 class="text-3xl font-serif mb-6">Your Selection is Empty</h2>
+				<p class="text-gray-600 mb-8 leading-relaxed">Add a piece to your selection before checking out.</p>
+				<a
+					href="/shop"
+					class="inline-block border-2 border-gray-900 px-8 py-3 text-sm tracking-[0.2em] uppercase hover:bg-gray-900 hover:text-white transition-all"
+				>
+					Explore Collection
+				</a>
+			</div>
+		{:else if !provider}
+			<div class="max-w-xl mx-auto text-center py-16">
+				<h2 class="text-2xl font-serif mb-4">Online payment is being set up</h2>
+				<p class="text-sm text-gray-600 leading-relaxed">
+					We can't take payments on the website just yet. Please check back soon.
+				</p>
+				{#if dev}
+					<p class="text-xs text-gray-400 mt-6 leading-relaxed">
+						Dev note: this region's payment providers are
+						<code>{providerIds.join(', ') || '(none)'}</code>. Checkout supports Stripe
+						(<code>pp_stripe_stripe</code>) and Braintree — enable one on the region in the Medusa admin
+						(Settings → Regions → Payment providers).
+					</p>
+				{/if}
+			</div>
+		{:else if provider.kind === 'stripe' && !STRIPE_KEY}
+			<div class="max-w-xl mx-auto text-center py-16">
+				<h2 class="text-2xl font-serif mb-4">Online payment is being set up</h2>
+				<p class="text-sm text-gray-600">We can't take payments on the website just yet. Please check back soon.</p>
+				{#if dev}
+					<p class="text-xs text-gray-400 mt-6">
+						Dev note: set <code>STRIPE_KEY</code> (publishable key) and <code>STRIPE_REDIRECT_URL</code> in
+						<code>.env</code>.
+					</p>
+				{/if}
+			</div>
+		{:else}
+			<CheckoutAuto
+				publishableKey={STRIPE_KEY}
+				returnUrl={STRIPE_REDIRECT_URL}
+				redirectTo="/success"
+				oncomplete={rememberOrder}
+			/>
+		{/if}
+	</div>
+</div>

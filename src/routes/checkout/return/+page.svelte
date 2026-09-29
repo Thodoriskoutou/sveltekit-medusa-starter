@@ -6,10 +6,11 @@
 	import { STRIPE_KEY } from '$app/env/public'
 	import { Return } from '$lib/components/ui/checkout'
 	import { Metadata } from '$lib/components/ui/seo'
+	import { rememberOrder } from '$lib/medusa/order-summary'
 </script>
 
 <Metadata config={{ title: 'Order confirmation', noindex: true }} />
 
-<section class="mx-auto max-w-3xl px-4 py-12">
-	<Return publishableKey={STRIPE_KEY} />
+<section class="min-h-[60vh] bg-white px-4 py-24">
+	<Return publishableKey={STRIPE_KEY} redirectTo="/success" oncomplete={rememberOrder} />
 </section>

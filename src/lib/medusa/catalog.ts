@@ -1,0 +1,216 @@
+import type { StoreProduct, StoreProductVariant } from '@medusajs/types';
+
+/**
+ * Turns Medusa store products into the shape the Wild Coral pages render.
+ *
+ * Medusa models "Color" and "Size" as product *options*; each purchasable combination is a
+ * *variant*. We flatten that into `colors` / `sizes` for the swatches and buttons, and keep a
+ * `variants` list so the product page can resolve the chosen color + size back to a variant id
+ * (which is what the cart needs).
+ */
+
+/** Fields the storefront requests on top of the SDK's default price field. */
+export const PRODUCT_FIELDS = '*categories,+variants.inventory_quantity';
+
+export interface CatalogVariant {
+	id: string;
+	color: string | null;
+	size: string | null;
+	/** Price in the currency's main unit (Medusa v2 stores 98 for €98, not cents). */
+	price: number | null;
+	inStock: boolean;
+	/** Stock cap for the quantity picker; null when unlimited (unmanaged or backorderable). */
+	maxQuantity: number | null;
+}
+
+export interface CatalogProduct {
+	id: string;
+	/** URL slug — routes use `/product/{handle}`. */
+	handle: string;
+	name: string;
+	/** Lowest variant price; null when the SDK could not resolve a pricing region. */
+	price: number | null;
+	currency: string;
+	category: string;
+	colors: { name: string; hex: string }[];
+	sizes: string[];
+	description: string;
+	/** Still images only (thumbnail first) — for previews, structured data and video posters. */
+	images: string[];
+	/** Everything to show in galleries and cards: videos first, then the images. */
+	media: string[];
+	variants: CatalogVariant[];
+}
+
+// ---------------------------------------------------------------------------------------------
+// Video support
+//
+// Medusa's admin only uploads images, so a product's videos come from two places:
+//   1. any media URL that ends in a video extension (in case your Medusa accepts video uploads), and
+//   2. product *metadata* (Products → the product → Metadata): a `video` key holding a video URL,
+//      plus `video_2`, `video_3`, … for more, or a `videos` key with several URLs separated by
+//      commas or spaces. URLs can be absolute (https://cdn.example.com/a.mp4) or site-relative
+//      (/videos/a.mp4, served from the `static/videos` folder).
+// Keep a still image as the product's Thumbnail: the cart, checkout and search previews need one.
+// ---------------------------------------------------------------------------------------------
+
+const VIDEO_URL = /\.(?:mp4|webm|mov|m4v)(?:[?#].*)?$/i;
+
+export const isVideoUrl = (url: string): boolean => VIDEO_URL.test(url);
+
+function metadataVideos(metadata: Record<string, unknown> | null | undefined): string[] {
+	if (!metadata) return [];
+	const urls: string[] = [];
+	const add = (value: unknown) => {
+		if (typeof value !== 'string') return;
+		for (const part of value.split(/[\s,]+/)) {
+			if (part && /^(https?:\/\/|\/)/.test(part) && isVideoUrl(part)) urls.push(part);
+		}
+	};
+	// `video`, `video_2`, `video_3`, … in numeric order (`video` counts as 1).
+	Object.keys(metadata)
+		.map((key) => ({ key, match: /^video(?:_(\d+))?$/i.exec(key) }))
+		.filter((k) => k.match)
+		.sort((a, b) => Number(a.match?.[1] ?? 1) - Number(b.match?.[1] ?? 1))
+		.forEach((k) => add(metadata[k.key]));
+	add(metadata.videos);
+	return urls;
+}
+
+// Medusa has no colour-swatch field, so swatch colours are looked up by name. Add your own
+// colour names here (lower-case); anything not listed shows as neutral grey. (There is deliberately
+// no CSS-name fallback: it can't run on the server, so the swatch would differ between the server
+// render and the browser.) An option value can also carry `metadata.hex` to override this.
+const COLOR_HEX: Record<string, string> = {
+	white: '#FFFFFF',
+	black: '#000000',
+	sand: '#D4B896',
+	navy: '#1E3A5F',
+	coral: '#FF6B6B',
+	mint: '#95E1D3',
+	lavender: '#C7A8E4',
+	wine: '#722F37',
+	emerald: '#2D5F4F',
+	'leopard print': '#C9A574',
+	'zebra print': '#E8E8E8',
+	terracotta: '#C65D3B',
+	'rose gold': '#B76E79',
+	champagne: '#F7E7CE',
+	// Wild Coral range (from the product photos)
+	gold: '#C9A84C',
+	olive: '#5A6234',
+	pistachio: '#A8C686',
+	pink: '#F4A6C4',
+	copper: '#B8703A',
+	silver: '#C4C1C6',
+	'cream leopard': '#E9DCC7'
+};
+const FALLBACK_HEX = '#D1D5DB';
+
+export function colorHex(name: string, metadataHex?: unknown): string {
+	if (typeof metadataHex === 'string' && /^#[0-9a-f]{3,8}$/i.test(metadataHex)) return metadataHex;
+	return COLOR_HEX[name.trim().toLowerCase()] ?? FALLBACK_HEX;
+}
+
+const isColorOption = (title: string) => /^(colou?r|χρώμα)$/i.test(title.trim());
+const isSizeOption = (title: string) => /^(size|μέγεθος)$/i.test(title.trim());
+
+function variantInStock(v: StoreProductVariant): boolean {
+	if (v.manage_inventory === false || v.allow_backorder) return true;
+	return (v.inventory_quantity ?? 0) > 0;
+}
+
+function variantMaxQuantity(v: StoreProductVariant): number | null {
+	if (v.manage_inventory === false || v.allow_backorder) return null;
+	return Math.max(0, v.inventory_quantity ?? 0);
+}
+
+export function toCatalogProduct(p: StoreProduct): CatalogProduct {
+	const options = p.options ?? [];
+	const colorOption = options.find((o) => isColorOption(o.title ?? ''));
+	const sizeOption = options.find((o) => isSizeOption(o.title ?? ''));
+
+	const valueOf = (v: StoreProductVariant, optionId?: string): string | null => {
+		if (!optionId) return null;
+		return v.options?.find((o) => o.option_id === optionId)?.value ?? null;
+	};
+
+	const variants: CatalogVariant[] = (p.variants ?? []).map((v) => {
+		const amount = v.calculated_price?.calculated_amount;
+		return {
+			id: v.id,
+			color: valueOf(v, colorOption?.id),
+			size: valueOf(v, sizeOption?.id),
+			price: typeof amount === 'number' ? amount : null,
+			inStock: variantInStock(v),
+			maxQuantity: variantMaxQuantity(v)
+		};
+	});
+
+	const prices = variants.map((v) => v.price).filter((n): n is number => n !== null);
+	const currency =
+		(p.variants?.find((v) => v.calculated_price?.currency_code)?.calculated_price?.currency_code as
+			| string
+			| undefined) ?? 'eur';
+
+	const uploaded = (p.images ?? []).map((i) => i.url).filter(Boolean);
+	if (p.thumbnail && !uploaded.includes(p.thumbnail)) uploaded.unshift(p.thumbnail);
+	const images = uploaded.filter((url) => !isVideoUrl(url));
+	const videos = [...new Set([...uploaded.filter(isVideoUrl), ...metadataVideos(p.metadata)])];
+
+	return {
+		id: p.id,
+		handle: p.handle,
+		name: p.title,
+		price: prices.length ? Math.min(...prices) : null,
+		currency: currency.toUpperCase(),
+		category: p.categories?.[0]?.name ?? '',
+		colors: (colorOption?.values ?? [])
+			.slice()
+			.sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0))
+			.map((v) => ({ name: v.value, hex: colorHex(v.value, v.metadata?.hex) })),
+		sizes: (sizeOption?.values ?? [])
+			.slice()
+			.sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0))
+			.map((v) => v.value),
+		description: p.description ?? '',
+		images,
+		media: [...videos, ...images],
+		variants
+	};
+}
+
+/** The variant for a color + size choice (either may be null when the product has no such option). */
+export function findVariant(
+	product: CatalogProduct,
+	color: string | null,
+	size: string | null
+): CatalogVariant | undefined {
+	return product.variants.find(
+		(v) =>
+			(product.colors.length === 0 || v.color === color) &&
+			(product.sizes.length === 0 || v.size === size)
+	);
+}
+
+/** Whether any variant of the given color/size is buyable — for greying out sold-out choices. */
+export function isAvailable(
+	product: CatalogProduct,
+	color: string | null,
+	size: string | null
+): boolean {
+	return product.variants.some(
+		(v) =>
+			(color === null || v.color === color) && (size === null || v.size === size) && v.inStock
+	);
+}
+
+export function formatPrice(amount: number | null | undefined, currency: string): string {
+	if (amount === null || amount === undefined) return '—';
+	return new Intl.NumberFormat('en', {
+		style: 'currency',
+		currency,
+		minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+		maximumFractionDigits: 2
+	}).format(amount);
+}
