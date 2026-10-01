@@ -18,11 +18,11 @@
 	const money = (n: number | null) => formatPrice(n, order.currency);
 	// Tracking links come from whoever fulfilled the order in Medusa; only follow real web links.
 	const safeUrl = (u: string | null) => (u && /^https?:\/\//i.test(u) ? u : null);
-	const help = $derived(
-		site.contactEmail
-			? { href: `mailto:${site.contactEmail}?subject=${encodeURIComponent(`Order ${order.number}`)}`, label: 'Email us about this order' }
-			: { href: '/customer-care', label: 'Visit Customer Care' }
-	);
+	// Opens the contact form on "My order" with this order number filled in.
+	const help = $derived({
+		href: `/contact?topic=order&order=${encodeURIComponent(order.number.replace('#', ''))}`,
+		label: 'Contact us about this order'
+	});
 </script>
 
 <div class="mx-auto max-w-5xl px-8 md:px-16 lg:px-24 pb-32">

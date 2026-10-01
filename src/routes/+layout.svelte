@@ -21,7 +21,7 @@
 	let { children } = $props();
 
 	// Owner settings from src/lib/site.ts: empty values simply hide the matching link.
-	const contactHref = site.contactEmail ? `mailto:${site.contactEmail}` : '/customer-care';
+	const contactHref = '/contact';
 	// Social icons: a URL makes a link, '' shows the icon dimmed until the link is added, and a
 	// network that isn't in site.social isn't shown (see src/lib/site.ts).
 	const socialNetworks = Object.entries(site.social) as [SocialNetwork, string][];

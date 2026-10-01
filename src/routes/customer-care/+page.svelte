@@ -98,6 +98,7 @@
 					{:else}
 						<p class="text-sm text-gray-600">Our team is happy to help with sizing, orders and returns.</p>
 					{/if}
+					<a href="/contact" class="mt-4 inline-block text-sm underline hover:opacity-70 transition-opacity">Send us a message</a>
 					</div>
 				</nav>
 			</aside>

@@ -59,7 +59,7 @@
 		if (saveTimer) persistOptions();
 	});
 
-	const contactHref = site.contactEmail ? `mailto:${site.contactEmail}` : '/customer-care';
+	const contactHref = '/contact';
 
 	let busy = $state(false);
 	let errorMessage = $state('');

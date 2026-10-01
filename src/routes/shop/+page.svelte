@@ -63,7 +63,7 @@
 	const intro = $derived(
 		catalog.data?.categories.find((c) => c.name === selectedCategory)?.description?.trim() || site.shopIntro
 	);
-	const contactHref = site.contactEmail ? `mailto:${site.contactEmail}` : '/customer-care';
+	const contactHref = '/contact';
 
 	// Every filter lives in the URL (see filters.ts), so a filtered view can be shared and the back button works.
 	const filters = $derived<Filters>({ category: selectedCategory, ...parseFilters(page.url.searchParams) });

@@ -46,10 +46,14 @@ export const site = {
 	sizeChart: [] as { size: string; bust: string; waist: string; hips: string }[],
 	sizeChartUnit: 'cm',
 
-	/** Public contact email. When set, "Contact Us" and the cart's help link open an email. */
+	/** Public contact email, shown on the /contact page (and used as the form's destination unless CONTACT_TO_EMAIL is set). */
 	contactEmail: '',
+	/** Shown on the /contact page, e.g. '+30 210 000 0000'. Empty hides the line. */
+	phone: '',
+	/** Shown on the /contact page, e.g. 'Ermou 12, 105 63 Athens'. Empty hides the line. */
+	address: '',
 
-	/** Support hours shown on the customer-care page, e.g. 'Monday–Friday, 10:00–18:00 (Athens time)'. Empty hides the line. */
+	/** Support hours shown on the /contact and customer-care pages, e.g. 'Monday–Friday, 10:00–18:00 (Athens time)'. Empty hides the line. */
 	supportHours: '',
 
 	/** Links used by the cookie banner. Add the URL of each page once it exists (e.g. '/privacy'). */

@@ -217,7 +217,7 @@
 					<h3 class="text-xs tracking-[0.2em] uppercase">Here to Help</h3>
 					<p class="text-xs text-gray-600 leading-relaxed">
 						Questions about your order?
-						<a href={site.contactEmail ? `mailto:${site.contactEmail}` : '/customer-care'} class="underline hover:opacity-70">Get in touch</a>
+						<a href="/contact?topic=order" class="underline hover:opacity-70">Get in touch</a>
 					</p>
 				</div>
 			</div>

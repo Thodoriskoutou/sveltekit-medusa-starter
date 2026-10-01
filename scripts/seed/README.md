@@ -351,3 +351,44 @@ color and size combination, so "Gold, size M, in stock" only matches a piece tha
 - Cards show the photo of the color you filtered on or hovered, and open the product page on that color.
 - **Style** uses the tags on your products (Products → the product → Tags); add or rename tags in the admin
   and the filter follows.
+
+---
+
+# Contact page
+
+`/contact` has a message form and your contact details. Every "Contact Us" link on the site opens it, and some
+open it ready to fill in: from an order ("Contact us about this order") the topic is "My order" with the order
+number filled in, and "Ask us about sizing" on a product page picks "Sizing & fit" and names the piece. A
+signed-in customer's name and email are filled in for them.
+
+## Your details
+
+In `src/lib/site.ts`: `contactEmail`, `phone`, `address`, `supportHours` and the `social` links. Whatever is
+empty is simply not shown.
+
+## Making the form send email
+
+A form that can't deliver would swallow customers' messages, so **the form only appears once email sending is set
+up**. Until then the page shows your email address (if you set `contactEmail`) and the other details.
+
+The form sends through [Resend](https://resend.com) using your own account:
+
+1. Create a free Resend account and an **API key**.
+2. Verify your domain in Resend (so the sender can be `shop@yourdomain.gr`). For a first test you can skip this:
+   Resend's test sender only delivers to the address you registered with.
+3. In your `.env`:
+
+   ```
+   RESEND_API_KEY="re_..."
+   CONTACT_TO_EMAIL="you@yourdomain.gr"          # where messages arrive (default: contactEmail in site.ts)
+   CONTACT_FROM_EMAIL="Wild Coral <shop@yourdomain.gr>"   # a domain verified in Resend
+   ```
+
+4. Restart the site. The form appears on `/contact`.
+
+Each message arrives as a plain email with the customer's name, email, topic, order number and message. **Reply**
+answers the customer directly (their address is set as the reply-to).
+
+**Spam:** a hidden field that only bots fill in (those messages are dropped silently), and at most 5 messages per
+visitor every 10 minutes. If sending ever fails, the customer sees an error and keeps what they wrote; the
+details are in the server log. If you'd rather use another email service, tell me which.

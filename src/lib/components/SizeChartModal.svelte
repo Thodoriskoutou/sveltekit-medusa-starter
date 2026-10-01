@@ -12,7 +12,7 @@
 
 	let { isOpen, onClose }: Props = $props();
 
-	const contactHref = site.contactEmail ? `mailto:${site.contactEmail}` : '/customer-care';
+	const contactHref = '/contact?topic=sizing';
 
 	$effect(() => {
 		if (isOpen) {

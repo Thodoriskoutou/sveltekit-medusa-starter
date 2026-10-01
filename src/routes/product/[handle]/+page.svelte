@@ -86,7 +86,8 @@
 		].filter((section) => section.body)
 	);
 	const detailImage = $derived(product?.images[1] ?? photos.detail);
-	const contactHref = site.contactEmail ? `mailto:${site.contactEmail}` : '/customer-care';
+	// Opens the contact form on "Sizing & fit", mentioning this piece.
+	const contactHref = $derived(product ? `/contact?topic=sizing&product=${encodeURIComponent(product.name)}` : '/contact?topic=sizing');
 
 	let selectedColor = $state(0);
 	let selectedSize = $state('');
