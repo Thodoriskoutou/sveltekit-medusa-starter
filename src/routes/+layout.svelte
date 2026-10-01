@@ -3,7 +3,7 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { getCart, getProductCategoriesQuery } from 'sveltekit-medusa-sdk';
+	import { getCart, getProductCategoriesQuery, getContentItems } from 'sveltekit-medusa-sdk';
 	import { SITE_NAME, SITE_URL } from '$app/env/public';
 	import { MetaProvider } from '$lib/components/ui/seo';
 	import * as Auth from '$lib/components/ui/auth';
@@ -40,6 +40,15 @@
 			.filter((c) => !c.parent_category_id)
 			.slice()
 			.sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0))
+	);
+
+	// The three newest Journal posts for the menu and footer. Read without awaiting, so a missing
+	// collection or an unreachable Medusa just leaves the "All Stories" link on its own.
+	const journalQuery = getContentItems({ slug: site.journalCollection, limit: 3 });
+	const latestStories = $derived(
+		(journalQuery.current?.content_items ?? [])
+			.slice()
+			.sort((a, b) => Date.parse(b.published_at ?? b.created_at) - Date.parse(a.published_at ?? a.created_at))
 	);
 
 	let scrolled = $state(false);
@@ -252,15 +261,17 @@
 									All Stories
 								</a>
 							</li>
-							<li>
-								<a
-									href="/journal/featured"
-									class="text-lg hover:opacity-70 transition-opacity"
-									onclick={() => (menuOpen = false)}
-								>
-									The Eternal Summer
-								</a>
-							</li>
+							{#each latestStories as story (story.id)}
+								<li>
+									<a
+										href={`/journal/${story.slug}`}
+										class="text-lg hover:opacity-70 transition-opacity"
+										onclick={() => (menuOpen = false)}
+									>
+										{story.title}
+									</a>
+								</li>
+							{/each}
 						</ul>
 					</div>
 
@@ -379,9 +390,11 @@
 					<h3 class="text-xs tracking-[0.2em] uppercase mb-6 text-gray-900">Journal</h3>
 					<ul class="space-y-3 text-sm text-gray-600">
 						<li><a href="/journal" class="hover:text-gray-900 transition-colors">All Stories</a></li>
-						<li>
-							<a href="/journal/featured" class="hover:text-gray-900 transition-colors">Featured</a>
-						</li>
+						{#each latestStories as story (story.id)}
+							<li>
+								<a href={`/journal/${story.slug}`} class="hover:text-gray-900 transition-colors">{story.title}</a>
+							</li>
+						{/each}
 					</ul>
 				</div>
 

@@ -1,13 +1,18 @@
 <script lang="ts">
+	// The size guide pop-up: how to measure, and the shop's own size chart (from `site.sizeChart`).
+	// Until a chart is filled in there, no table is shown: customers are asked to write instead of
+	// being given numbers nobody confirmed.
 	import X from '@lucide/svelte/icons/x';
+	import { site } from '$lib/site';
 
 	interface Props {
 		isOpen: boolean;
 		onClose: () => void;
-		productType?: 'bikini-top' | 'bikini-bottom' | 'one-piece' | 'cover-up';
 	}
 
 	let { isOpen, onClose }: Props = $props();
+
+	const contactHref = site.contactEmail ? `mailto:${site.contactEmail}` : '/customer-care';
 
 	$effect(() => {
 		if (isOpen) {
@@ -25,22 +30,6 @@
 			onClose();
 		}
 	}
-
-	const bikiniTopSizes = [
-		{ size: 'XS', bust: '32-33"', underbust: '27-28"', cup: 'A-B', intSize: 'EU 32-34' },
-		{ size: 'S', bust: '34-35"', underbust: '28-29"', cup: 'B-C', intSize: 'EU 36-38' },
-		{ size: 'M', bust: '36-37"', underbust: '30-31"', cup: 'C-D', intSize: 'EU 40-42' },
-		{ size: 'L', bust: '38-39"', underbust: '32-33"', cup: 'D-DD', intSize: 'EU 44-46' },
-		{ size: 'XL', bust: '40-42"', underbust: '34-35"', cup: 'DD-E', intSize: 'EU 48-50' }
-	];
-
-	const bikiniBottomSizes = [
-		{ size: 'XS', waist: '24-25"', hip: '34-35"', intSize: 'EU 32-34' },
-		{ size: 'S', waist: '26-27"', hip: '36-37"', intSize: 'EU 36-38' },
-		{ size: 'M', waist: '28-29"', hip: '38-39"', intSize: 'EU 40-42' },
-		{ size: 'L', waist: '30-32"', hip: '40-42"', intSize: 'EU 44-46' },
-		{ size: 'XL', waist: '33-35"', hip: '43-45"', intSize: 'EU 48-50' }
-	];
 </script>
 
 {#if isOpen}
@@ -62,8 +51,7 @@
 				<div class="mb-8">
 					<h2 class="text-3xl md:text-4xl font-serif mb-4">Size Guide</h2>
 					<p class="text-base leading-relaxed text-gray-600 max-w-2xl">
-						Our pieces are designed to fit true to size with Italian sizing standards. For the
-						perfect fit, we recommend measuring yourself and comparing with the chart below.
+						{site.sizeChart.length ? 'For the best fit, measure yourself and compare with the chart.' : 'For the best fit, measure yourself. If you are unsure which size to choose, write to us and we will help.'}
 					</p>
 				</div>
 
@@ -73,89 +61,54 @@
 						<div>
 							<p class="font-medium mb-2">Bust</p>
 							<p class="text-gray-600">
-								Measure around the fullest part of your bust, keeping the tape parallel to the
-								floor
+								Measure around the fullest part of your bust, keeping the tape parallel to the floor
 							</p>
 						</div>
 						<div>
 							<p class="font-medium mb-2">Waist</p>
-							<p class="text-gray-600">
-								Measure around your natural waistline, keeping the tape comfortably loose
-							</p>
+							<p class="text-gray-600">Measure around your natural waistline, keeping the tape comfortably loose</p>
 						</div>
 						<div>
-							<p class="font-medium mb-2">Hip</p>
-							<p class="text-gray-600">
-								Measure around the fullest part of your hips, approximately 8" below your waist
-							</p>
+							<p class="font-medium mb-2">Hips</p>
+							<p class="text-gray-600">Measure around the fullest part of your hips</p>
 						</div>
 					</div>
 				</div>
 
-				<div class="mb-12">
-					<h3 class="text-lg font-serif mb-6">Bikini Top Sizes</h3>
-					<div class="overflow-x-auto">
-						<table class="w-full text-sm border-collapse">
-							<thead>
-								<tr class="border-b-2 border-gray-900">
-									<th class="text-left py-4 px-4 text-xs tracking-widest uppercase text-gray-500 font-medium">Size</th>
-									<th class="text-left py-4 px-4 text-xs tracking-widest uppercase text-gray-500 font-medium">Bust</th>
-									<th class="text-left py-4 px-4 text-xs tracking-widest uppercase text-gray-500 font-medium">Underbust</th>
-									<th class="text-left py-4 px-4 text-xs tracking-widest uppercase text-gray-500 font-medium">Cup Size</th>
-									<th class="text-left py-4 px-4 text-xs tracking-widest uppercase text-gray-500 font-medium">Int'l Size</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each bikiniTopSizes as row, index (row.size)}
-									<tr class="border-b border-gray-200 {index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}">
-										<td class="py-4 px-4 font-medium">{row.size}</td>
-										<td class="py-4 px-4 text-gray-600">{row.bust}</td>
-										<td class="py-4 px-4 text-gray-600">{row.underbust}</td>
-										<td class="py-4 px-4 text-gray-600">{row.cup}</td>
-										<td class="py-4 px-4 text-gray-600">{row.intSize}</td>
+				{#if site.sizeChart.length}
+					<div class="mb-12">
+						<h3 class="text-lg font-serif mb-6">Sizes</h3>
+						<div class="overflow-x-auto">
+							<table class="w-full text-sm border-collapse">
+								<thead>
+									<tr class="border-b-2 border-gray-900">
+										<th class="text-left py-4 px-4 text-xs tracking-widest uppercase text-gray-500 font-medium">Size</th>
+										<th class="text-left py-4 px-4 text-xs tracking-widest uppercase text-gray-500 font-medium">Bust ({site.sizeChartUnit})</th>
+										<th class="text-left py-4 px-4 text-xs tracking-widest uppercase text-gray-500 font-medium">Waist ({site.sizeChartUnit})</th>
+										<th class="text-left py-4 px-4 text-xs tracking-widest uppercase text-gray-500 font-medium">Hips ({site.sizeChartUnit})</th>
 									</tr>
-								{/each}
-							</tbody>
-						</table>
+								</thead>
+								<tbody>
+									{#each site.sizeChart as row, index (row.size)}
+										<tr class="border-b border-gray-200 {index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}">
+											<td class="py-4 px-4 font-medium">{row.size}</td>
+											<td class="py-4 px-4 text-gray-600">{row.bust}</td>
+											<td class="py-4 px-4 text-gray-600">{row.waist}</td>
+											<td class="py-4 px-4 text-gray-600">{row.hips}</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+						<p class="mt-4 text-xs text-gray-500">Body measurements in {site.sizeChartUnit}. Measurements are approximate.</p>
 					</div>
-				</div>
+				{/if}
 
-				<div class="mb-12">
-					<h3 class="text-lg font-serif mb-6">Bikini Bottom Sizes</h3>
-					<div class="overflow-x-auto">
-						<table class="w-full text-sm border-collapse">
-							<thead>
-								<tr class="border-b-2 border-gray-900">
-									<th class="text-left py-4 px-4 text-xs tracking-widest uppercase text-gray-500 font-medium">Size</th>
-									<th class="text-left py-4 px-4 text-xs tracking-widest uppercase text-gray-500 font-medium">Waist</th>
-									<th class="text-left py-4 px-4 text-xs tracking-widest uppercase text-gray-500 font-medium">Hip</th>
-									<th class="text-left py-4 px-4 text-xs tracking-widest uppercase text-gray-500 font-medium">Int'l Size</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each bikiniBottomSizes as row, index (row.size)}
-									<tr class="border-b border-gray-200 {index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}">
-										<td class="py-4 px-4 font-medium">{row.size}</td>
-										<td class="py-4 px-4 text-gray-600">{row.waist}</td>
-										<td class="py-4 px-4 text-gray-600">{row.hip}</td>
-										<td class="py-4 px-4 text-gray-600">{row.intSize}</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-				</div>
-
-				<div class="border-t border-gray-200 pt-8">
-					<h3 class="text-xs tracking-widest uppercase text-gray-500 mb-4">Fit Notes</h3>
-					<div class="space-y-3 text-sm text-gray-600">
-						<p>• All measurements are approximate and may vary slightly by style</p>
-						<p>
-							• Between sizes? We recommend sizing up for more coverage, down for a sportier fit
-						</p>
-						<p>• Our adjustable ties and clasps allow for customizable fit</p>
-						<p>• Each piece is handcrafted in Italy with premium Italian lycra</p>
-					</div>
+				<div class="border-t border-gray-200 pt-8 text-sm text-gray-600">
+					<p>
+						Between sizes, or not sure which to choose?
+						<a href={contactHref} class="underline hover:opacity-70 transition-opacity">Write to us</a> and we'll help.
+					</p>
 				</div>
 
 				<div class="mt-8 flex justify-end">

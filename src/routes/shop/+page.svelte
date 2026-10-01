@@ -2,13 +2,30 @@
 	import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import X from '@lucide/svelte/icons/x';
-	import Play from '@lucide/svelte/icons/play';
+	import Ruler from '@lucide/svelte/icons/ruler';
+	import Truck from '@lucide/svelte/icons/truck';
+	import MessageCircle from '@lucide/svelte/icons/message-circle';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { getProductsQuery, getProductCategoriesQuery } from 'sveltekit-medusa-sdk';
-	import { toCatalogProduct, formatPrice, PRODUCT_FIELDS } from '$lib/medusa/catalog';
+	import { toCatalogProduct, formatPrice, previewMedia, PRODUCT_FIELDS, type CatalogProduct } from '$lib/medusa/catalog';
 	import ProductMedia from '$lib/components/ProductMedia.svelte';
+	import FilterChip from '$lib/components/FilterChip.svelte';
+	import EmptyFilterState from '$lib/components/EmptyFilterState.svelte';
+	import {
+		applyFilters,
+		filterOptions,
+		filtersHref,
+		parseFilters,
+		countWith,
+		activeFilterCount,
+		cardColorIndex,
+		SORTS,
+		type Filters,
+		type SortKey
+	} from '$lib/medusa/filters';
 	import { safe } from '$lib/medusa/safe';
+	import { site, photos } from '$lib/site';
 	import { dev } from '$app/env';
 	import { Metadata } from '$lib/components/ui/seo';
 
@@ -28,7 +45,7 @@
 				.slice()
 				.sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0))
 				.filter((c) => products.some((p) => p.category === c.name))
-				.map((c) => ({ name: c.name, handle: c.handle }));
+				.map((c) => ({ name: c.name, handle: c.handle, description: c.description ?? '' }));
 			return { products, categories };
 		})
 	);
@@ -42,43 +59,71 @@
 		catalog.data?.categories.find((c) => c.handle === page.url.searchParams.get('category'))?.name ?? 'all'
 	);
 
-	function selectCategory(name: string) {
-		const handle = catalog.data?.categories.find((c) => c.name === name)?.handle;
-		goto(handle ? `?category=${handle}` : page.url.pathname, { replace: true, reset: false });
+	// The intro under the heading: the category's own description from Medusa, else the shop-wide line.
+	const intro = $derived(
+		catalog.data?.categories.find((c) => c.name === selectedCategory)?.description?.trim() || site.shopIntro
+	);
+	const contactHref = site.contactEmail ? `mailto:${site.contactEmail}` : '/customer-care';
+
+	// Every filter lives in the URL (see filters.ts), so a filtered view can be shared and the back button works.
+	const filters = $derived<Filters>({ category: selectedCategory, ...parseFilters(page.url.searchParams) });
+	const options = $derived(filterOptions(products));
+	const filteredProducts = $derived(applyFilters(products, filters));
+	const filterCount = $derived(activeFilterCount(filters));
+	const currency = $derived(products[0]?.currency ?? 'EUR');
+
+	function setFilters(patch: Parameters<typeof filtersHref>[1]) {
+		goto(filtersHref(page.url, patch), { replace: true, reset: false });
 	}
 
+	function selectCategory(name: string) {
+		const handle = catalog.data?.categories.find((c) => c.name === name)?.handle ?? null;
+		setFilters({ categoryHandle: handle });
+	}
+
+	function clearFilters() {
+		setFilters({ categoryHandle: null, sizes: [], colors: [], styles: [], maxPrice: null, inStock: false });
+	}
+
+	const toggleValue = (list: string[], value: string) => (list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
+
+	// The chosen filters as removable chips under the toolbar.
+	const chips = $derived([
+		...(filters.category !== 'all' ? [{ key: 'category', label: filters.category, remove: () => selectCategory('all') }] : []),
+		...filters.sizes.map((size) => ({ key: `size-${size}`, label: `Size ${size}`, remove: () => setFilters({ sizes: filters.sizes.filter((v) => v !== size) }) })),
+		...filters.colors.map((color) => ({ key: `color-${color}`, label: color, remove: () => setFilters({ colors: filters.colors.filter((v) => v !== color) }) })),
+		...filters.styles.map((style) => ({ key: `style-${style}`, label: style, remove: () => setFilters({ styles: filters.styles.filter((v) => v !== style) }) })),
+		...(filters.maxPrice !== null ? [{ key: 'max', label: `Up to ${formatPrice(filters.maxPrice, currency)}`, remove: () => setFilters({ maxPrice: null }) }] : []),
+		...(filters.inStock ? [{ key: 'stock', label: 'In stock', remove: () => setFilters({ inStock: false }) }] : [])
+	]);
+
 	let showFilters = $state(false);
-	let sortBy = $state('featured');
+	// While the price slider is being dragged; the URL only changes when it is let go.
+	let priceDraft = $state<number | null>(null);
+	// Swatches on a card: hover previews a color, a click keeps it. With a color filter on, cards start on that color.
 	let hoveredProductColors = $state<{ [key: string]: number }>({});
+	let chosenColors = $state<{ [key: string]: number }>({});
 
-	let filteredProducts = $derived(
-		selectedCategory === 'all' ? products : products.filter((p) => p.category === selectedCategory)
-	);
+	function getActiveColorIndex(product: CatalogProduct) {
+		return hoveredProductColors[product.id] ?? chosenColors[product.id] ?? cardColorIndex(product, filters);
+	}
 
-	function getActiveColorIndex(productId: string) {
-		return hoveredProductColors[productId] || 0;
+	// The product page opens on the color that was showing on the card.
+	function productHref(product: CatalogProduct, colorIndex: number) {
+		const color = product.colors[colorIndex]?.name;
+		return `/product/${product.handle}${color && product.colors.length > 1 ? `?color=${encodeURIComponent(color)}` : ''}`;
 	}
 
 	let completeTheLook = $derived(
 		products.filter((p) => p.category !== selectedCategory).slice(0, 3)
 	);
 
-	const colorOptions = [
-		{ name: 'White', hex: '#FFFFFF' },
-		{ name: 'Black', hex: '#000000' },
-		{ name: 'Sand', hex: '#D4B896' },
-		{ name: 'Navy', hex: '#1E3A5F' },
-		{ name: 'Coral', hex: '#FF6B6B' },
-		{ name: 'Mint', hex: '#95E1D3' },
-		{ name: 'Lavender', hex: '#C7A8E4' },
-		{ name: 'Wine', hex: '#722F37' }
-	];
 </script>
 
 <Metadata
 	config={{
 		title: selectedCategory === 'all' ? 'Shop' : selectedCategory,
-		description: 'Luxury swimwear crafted from Italian fabrics.'
+		description: intro
 	}}
 />
 
@@ -91,144 +136,215 @@
 					<h1 class="text-4xl md:text-6xl lg:text-7xl xl:text-8xl font-serif font-light tracking-tight">
 						{selectedCategory === 'all' ? 'All Styles' : selectedCategory}
 					</h1>
-					<p class="text-sm text-gray-400 mt-4">[Category heading annotation]</p>
 				</div>
 
 				<div class="lg:border-l lg:border-gray-200 lg:pl-12">
-					<p class="text-base md:text-lg leading-relaxed text-gray-700 mb-4">
-						Crafted for women who understand that true luxury is felt, not flaunted. Each piece is
-						cut from Italian fabrics designed to move with your body.
-					</p>
-					<p class="text-base md:text-lg leading-relaxed text-gray-700">
-						This collection celebrates sculptural minimalism—clean lines, architectural
-						silhouettes, and timeless elegance.
-					</p>
-					<p class="text-xs text-gray-400 mt-6">[Mood/inspiration copy]</p>
+					<p class="text-base md:text-lg leading-relaxed text-gray-700">{intro}</p>
 				</div>
 			</div>
 		</div>
 	</section>
 
-	<!-- 2. The "Utility Belt" - Sticky -->
+	<!-- 2. The "Utility Belt" - Sticky: filter button, result count, sort, and the chosen filters -->
 	<div class="sticky top-[72px] z-30 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
 		<div class="max-w-7xl mx-auto px-4 md:px-8 lg:px-16 xl:px-24 py-4">
-			<div class="md:hidden">
-				<p class="text-sm text-gray-600 text-center mb-3">
-					Showing <span class="font-medium">{filteredProducts.length}</span> Styles
-				</p>
-				<div class="flex items-center justify-between">
-					<button
-						onclick={() => (showFilters = !showFilters)}
-						class="flex items-center space-x-2 text-sm tracking-wider uppercase hover:opacity-70 transition-opacity"
-					>
-						<SlidersHorizontal class="w-4 h-4" />
-						<span>Filter</span>
-					</button>
-
-					<div class="relative">
-						<button class="flex items-center space-x-2 text-sm tracking-wider uppercase hover:opacity-70 transition-opacity">
-							<span>Sort</span>
-							<ChevronDown class="w-4 h-4" />
-						</button>
-					</div>
-				</div>
-			</div>
-
-			<div class="hidden md:flex items-center justify-between">
+			<div class="grid grid-cols-[auto_1fr_auto] items-center gap-4">
 				<button
 					onclick={() => (showFilters = !showFilters)}
-					class="flex items-center space-x-2 text-sm tracking-wider uppercase hover:opacity-70 transition-opacity"
+					aria-expanded={showFilters}
+					class="flex items-center space-x-2 whitespace-nowrap text-xs tracking-wider uppercase transition-opacity hover:opacity-70 md:text-sm"
 				>
 					<SlidersHorizontal class="w-4 h-4" />
-					<span>Filter By</span>
+					<span>Filter{filterCount ? ` (${filterCount})` : ''}</span>
 				</button>
 
-				<p class="text-sm text-gray-600">
-					Showing <span class="font-medium">{filteredProducts.length}</span> Styles
+				<p class="text-sm text-gray-600 text-center" aria-live="polite">
+					Showing <span class="font-medium">{filteredProducts.length}</span>
+					{filteredProducts.length === 1 ? 'Style' : 'Styles'}
 				</p>
 
-				<div class="relative">
-					<button class="flex items-center space-x-2 text-sm tracking-wider uppercase hover:opacity-70 transition-opacity">
-						<span>Sort: {sortBy === 'featured' ? 'Featured' : sortBy}</span>
-						<ChevronDown class="w-4 h-4" />
+				<label class="flex min-w-0 items-center gap-2 text-sm tracking-wider uppercase">
+					<span class="hidden md:inline">Sort</span>
+					<select
+						value={filters.sort}
+						onchange={(e) => setFilters({ sort: e.currentTarget.value as SortKey })}
+						class="w-28 cursor-pointer truncate border-0 bg-transparent py-1 pl-0 pr-6 text-xs tracking-normal uppercase hover:opacity-70 focus:outline-none focus:ring-0 md:w-auto md:pr-8 md:text-sm md:tracking-wider"
+					>
+						{#each SORTS as option (option.key)}
+							<option value={option.key}>{option.label}</option>
+						{/each}
+					</select>
+				</label>
+			</div>
+
+			{#if chips.length}
+				<div class="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-gray-100 pt-4">
+					{#each chips as chip (chip.key)}
+						<FilterChip label={chip.label} onRemove={chip.remove} />
+					{/each}
+					<button onclick={clearFilters} class="text-xs tracking-wider uppercase text-gray-500 underline transition-colors hover:text-gray-900">
+						Clear all
 					</button>
 				</div>
-			</div>
+			{/if}
 		</div>
 	</div>
 
 	{#if showFilters}
 		<div class="fixed inset-0 bg-black/30 z-40" onclick={() => (showFilters = false)} role="presentation"></div>
 
-		<div class="fixed top-0 left-0 h-full w-80 bg-white z-50 shadow-2xl overflow-y-auto">
-			<div class="p-8">
-				<div class="flex items-center justify-between mb-8 pb-6 border-b border-gray-200">
-					<h2 class="text-xl tracking-wide">Filters</h2>
-					<button onclick={() => (showFilters = false)} class="hover:opacity-70 transition-opacity">
-						<X class="w-5 h-5" />
-					</button>
-				</div>
+		<div class="fixed top-0 left-0 z-50 flex h-full w-80 max-w-[90vw] flex-col bg-white shadow-2xl" role="dialog" aria-label="Filters">
+			<div class="flex items-center justify-between border-b border-gray-200 px-8 py-6">
+				<h2 class="text-xl tracking-wide">Filters</h2>
+				<button onclick={() => (showFilters = false)} class="hover:opacity-70 transition-opacity" aria-label="Close filters">
+					<X class="w-5 h-5" />
+				</button>
+			</div>
 
+			<div class="flex-1 overflow-y-auto px-8 py-8">
 				<div class="mb-8">
 					<h3 class="text-xs tracking-[0.2em] uppercase mb-4 text-gray-900">Category</h3>
 					<div class="space-y-3">
 						{#each categories as cat (cat)}
-							<label class="flex items-center space-x-3 cursor-pointer group">
+							{@const n = countWith(products, filters, { category: cat })}
+							<label class="group flex cursor-pointer items-center space-x-3 {n === 0 && selectedCategory !== cat ? 'opacity-40' : ''}">
 								<input
 									type="radio"
 									name="category"
 									checked={selectedCategory === cat}
 									onchange={() => selectCategory(cat)}
-									class="w-4 h-4 accent-gray-900"
+									class="w-4 h-4 text-gray-900 accent-gray-900 focus:ring-gray-900"
 								/>
-								<span class="text-sm group-hover:opacity-70 transition-opacity">
-									{cat === 'all' ? 'All Styles' : cat}
-								</span>
+								<span class="text-sm group-hover:opacity-70 transition-opacity">{cat === 'all' ? 'All Styles' : cat}</span>
+								<span class="ml-auto text-xs text-gray-400">{n}</span>
 							</label>
 						{/each}
 					</div>
 				</div>
 
-				<div class="mb-8">
-					<h3 class="text-xs tracking-[0.2em] uppercase mb-4 text-gray-900">Size</h3>
-					<div class="grid grid-cols-5 gap-2">
-						{#each ['XS', 'S', 'M', 'L', 'XL'] as size (size)}
-							<button
-								class="border border-gray-300 py-2 text-sm hover:border-gray-900 hover:bg-gray-900 hover:text-white transition-all"
-							>
-								{size}
-							</button>
-						{/each}
+				{#if options.sizes.length}
+					<div class="mb-8">
+						<h3 class="text-xs tracking-[0.2em] uppercase mb-4 text-gray-900">Size</h3>
+						<div class="grid grid-cols-5 gap-2">
+							{#each options.sizes as size (size)}
+								{@const on = filters.sizes.includes(size)}
+								{@const n = countWith(products, filters, { sizes: [size] })}
+								<button
+									type="button"
+									aria-pressed={on}
+									disabled={n === 0 && !on}
+									title="{n} {n === 1 ? 'style' : 'styles'}"
+									onclick={() => setFilters({ sizes: toggleValue(filters.sizes, size) })}
+									class="border py-2 text-sm transition-all disabled:cursor-not-allowed disabled:text-gray-300 disabled:line-through {on
+										? 'border-gray-900 bg-gray-900 text-white'
+										: 'border-gray-300 hover:border-gray-900'}"
+								>
+									{size}
+								</button>
+							{/each}
+						</div>
 					</div>
-				</div>
+				{/if}
+
+				{#if options.colors.length}
+					<div class="mb-8">
+						<h3 class="text-xs tracking-[0.2em] uppercase mb-4 text-gray-900">Color</h3>
+						<div class="space-y-3">
+							{#each options.colors as color (color.name)}
+								{@const on = filters.colors.includes(color.name)}
+								{@const n = countWith(products, filters, { colors: [color.name] })}
+								<button
+									type="button"
+									aria-pressed={on}
+									disabled={n === 0 && !on}
+									onclick={() => setFilters({ colors: toggleValue(filters.colors, color.name) })}
+									class="flex w-full items-center gap-3 text-left text-sm transition-opacity hover:opacity-70 disabled:cursor-not-allowed disabled:opacity-40 {on
+										? 'font-medium'
+										: ''}"
+								>
+									<span
+										class="h-6 w-6 shrink-0 rounded-full border-2 {on ? 'border-gray-900 ring-2 ring-gray-300' : 'border-gray-300'}"
+										style="background-color: {color.hex}"
+									></span>
+									<span>{color.name}</span>
+									<span class="ml-auto text-xs text-gray-400">{n}</span>
+								</button>
+							{/each}
+						</div>
+					</div>
+				{/if}
+
+				{#if options.styles.length}
+					<div class="mb-8">
+						<h3 class="text-xs tracking-[0.2em] uppercase mb-4 text-gray-900">Style</h3>
+						<div class="space-y-3">
+							{#each options.styles as style (style)}
+								{@const on = filters.styles.includes(style)}
+								{@const n = countWith(products, filters, { styles: [style] })}
+								<label class="group flex cursor-pointer items-center space-x-3 {n === 0 && !on ? 'opacity-40' : ''}">
+									<input
+										type="checkbox"
+										checked={on}
+										disabled={n === 0 && !on}
+										onchange={() => setFilters({ styles: toggleValue(filters.styles, style) })}
+										class="w-4 h-4 text-gray-900 accent-gray-900 focus:ring-gray-900"
+									/>
+									<span class="text-sm capitalize group-hover:opacity-70 transition-opacity">{style}</span>
+									<span class="ml-auto text-xs text-gray-400">{n}</span>
+								</label>
+							{/each}
+						</div>
+					</div>
+				{/if}
+
+				{#if options.price}
+					<div class="mb-8">
+						<h3 class="text-xs tracking-[0.2em] uppercase mb-4 text-gray-900">Price</h3>
+						<label class="block">
+							<span class="text-sm">Up to {formatPrice(priceDraft ?? filters.maxPrice ?? options.price.max, currency)}</span>
+							<input
+								type="range"
+								min={options.price.min}
+								max={options.price.max}
+								step="1"
+								value={priceDraft ?? filters.maxPrice ?? options.price.max}
+								oninput={(e) => (priceDraft = Number(e.currentTarget.value))}
+								onchange={(e) => {
+									const value = Number(e.currentTarget.value);
+									priceDraft = null;
+									setFilters({ maxPrice: options.price && value >= options.price.max ? null : value });
+								}}
+								class="mt-3 w-full accent-gray-900"
+							/>
+						</label>
+					</div>
+				{/if}
 
 				<div class="mb-8">
-					<h3 class="text-xs tracking-[0.2em] uppercase mb-4 text-gray-900">Color</h3>
-					<div class="grid grid-cols-5 gap-3">
-						{#each colorOptions as color (color.name)}
-							<button
-								class="w-12 h-12 rounded-full border-2 border-gray-300 hover:border-gray-900 transition-all hover:scale-110"
-								style="background-color: {color.hex}"
-								title={color.name}
-							></button>
-						{/each}
-					</div>
+					<h3 class="text-xs tracking-[0.2em] uppercase mb-4 text-gray-900">Availability</h3>
+					<label class="group flex cursor-pointer items-center space-x-3">
+						<input
+							type="checkbox"
+							checked={filters.inStock}
+							onchange={(e) => setFilters({ inStock: e.currentTarget.checked })}
+							class="w-4 h-4 text-gray-900 accent-gray-900 focus:ring-gray-900"
+						/>
+						<span class="text-sm group-hover:opacity-70 transition-opacity">In stock only</span>
+					</label>
 				</div>
+			</div>
 
-				<div class="mb-8">
-					<h3 class="text-xs tracking-[0.2em] uppercase mb-4 text-gray-900">Price Range</h3>
-					<div class="space-y-3">
-						{#each ['Under €100', '€100 - €150', '€150 - €200', 'Over €200'] as range (range)}
-							<label class="flex items-center space-x-3 cursor-pointer group">
-								<input type="checkbox" class="w-4 h-4 accent-gray-900" />
-								<span class="text-sm group-hover:opacity-70 transition-opacity">{range}</span>
-							</label>
-						{/each}
-					</div>
-				</div>
-
+			<div class="space-y-3 border-t border-gray-200 px-8 py-6">
 				<button
-					class="w-full border-2 border-gray-900 py-3 text-sm tracking-[0.2em] uppercase hover:bg-gray-900 hover:text-white transition-all"
+					onclick={() => (showFilters = false)}
+					class="w-full bg-gray-900 py-3 text-sm tracking-[0.2em] uppercase text-white transition-all hover:bg-gray-800"
+				>
+					Show {filteredProducts.length} {filteredProducts.length === 1 ? 'Style' : 'Styles'}
+				</button>
+				<button
+					onclick={clearFilters}
+					disabled={filterCount === 0}
+					class="w-full border-2 border-gray-900 py-3 text-sm tracking-[0.2em] uppercase transition-all hover:bg-gray-900 hover:text-white disabled:cursor-not-allowed disabled:border-gray-300 disabled:text-gray-300 disabled:hover:bg-transparent disabled:hover:text-gray-300"
 				>
 					Clear All Filters
 				</button>
@@ -246,6 +362,8 @@
 						{dev ? catalog.error : 'Please try again in a moment.'}
 					</p>
 				</div>
+			{:else if filteredProducts.length === 0 && filterCount > 0}
+				<EmptyFilterState message="No pieces match your selection" onClear={clearFilters} />
 			{:else if filteredProducts.length === 0}
 				<div class="text-center py-24">
 					<p class="text-2xl font-serif mb-3">New pieces are on their way</p>
@@ -254,22 +372,22 @@
 			{/if}
 			{#each filteredProducts as product, index (product.id)}
 				{@const patternIndex = index % 4}
-				{@const activeColorIndex = getActiveColorIndex(product.id)}
+				{@const activeColorIndex = getActiveColorIndex(product)}
 
 				{#if patternIndex === 0}
 					<div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
 						<a
-							href={`/product/${product.handle}`}
+							href={productHref(product, activeColorIndex)}
 							class="lg:col-span-3 aspect-[3/4] bg-gray-100 border border-gray-200 relative group overflow-hidden"
 						>
-							<ProductMedia src={product.media[0]} poster={product.images[0]} alt={product.name} label="[HERO PRODUCT IMAGE]" />
+							<ProductMedia src={previewMedia(product, activeColorIndex)} poster={product.images[0]} alt={product.name} />
 							<div class="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
 						</a>
 
 						<div class="lg:col-span-2 flex flex-col justify-center space-y-6">
 							<div>
 								<a
-									href={`/product/${product.handle}`}
+									href={productHref(product, activeColorIndex)}
 									class="text-2xl md:text-3xl tracking-wide hover:opacity-70 transition-opacity"
 								>
 									{product.name}
@@ -296,17 +414,17 @@
 												? 'border-gray-900 ring-2 ring-gray-300'
 												: 'border-gray-300'}"
 											style="background-color: {color.hex}"
-											title={color.name}
+											onclick={() => (chosenColors = { ...chosenColors, [product.id]: colorIdx })}
+										title={color.name}
 										></button>
 									{/each}
 								</div>
-								<p class="text-xs text-gray-400 mt-2">[Hover to preview color]</p>
 							</div>
 
 							<p class="text-sm text-gray-600 leading-relaxed">{product.description}</p>
 
 							<a
-								href={`/product/${product.handle}`}
+								href={productHref(product, activeColorIndex)}
 								class="inline-block border-2 border-gray-900 px-8 py-3 text-sm tracking-[0.2em] uppercase text-center hover:bg-gray-900 hover:text-white transition-all w-fit"
 							>
 								View Details
@@ -318,19 +436,19 @@
 					{#if nextProduct}
 						<div class="grid grid-cols-1 md:grid-cols-2 gap-8">
 							{#each [product, nextProduct] as prod (prod.id)}
-								{@const prodActiveColorIndex = getActiveColorIndex(prod.id)}
+								{@const prodActiveColorIndex = getActiveColorIndex(prod)}
 								<div>
 									<a
-										href={`/product/${prod.handle}`}
+										href={productHref(prod, prodActiveColorIndex)}
 										class="block aspect-[3/4] bg-gray-100 border border-gray-200 mb-4 relative group overflow-hidden"
 									>
-										<ProductMedia src={prod.media[0]} poster={prod.images[0]} alt={prod.name} />
+										<ProductMedia src={previewMedia(prod, prodActiveColorIndex)} poster={prod.images[0]} alt={prod.name} />
 										<div class="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
 									</a>
 
 									<div class="space-y-3">
 										<a
-											href={`/product/${prod.handle}`}
+											href={productHref(prod, prodActiveColorIndex)}
 											class="text-lg tracking-wide hover:opacity-70 transition-opacity block"
 										>
 											{prod.name}
@@ -354,7 +472,8 @@
 														? 'border-gray-900'
 														: 'border-gray-300'}"
 													style="background-color: {color.hex}"
-													title={color.name}
+													onclick={() => (chosenColors = { ...chosenColors, [prod.id]: colorIdx })}
+										title={color.name}
 												></button>
 											{/each}
 										</div>
@@ -368,16 +487,16 @@
 				{:else if patternIndex === 3}
 					<div class="max-w-2xl mx-auto">
 						<a
-							href={`/product/${product.handle}`}
+							href={productHref(product, activeColorIndex)}
 							class="block aspect-[3/4] bg-gray-100 border border-gray-200 mb-4 relative group overflow-hidden"
 						>
-							<ProductMedia src={product.media[0]} poster={product.images[0]} alt={product.name} label="[CENTERED PRODUCT IMAGE]" />
+							<ProductMedia src={previewMedia(product, activeColorIndex)} poster={product.images[0]} alt={product.name} />
 							<div class="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
 						</a>
 
 						<div class="text-center space-y-3">
 							<a
-								href={`/product/${product.handle}`}
+								href={productHref(product, activeColorIndex)}
 								class="text-xl tracking-wide hover:opacity-70 transition-opacity block"
 							>
 								{product.name}
@@ -398,6 +517,7 @@
 											? 'border-gray-900'
 											: 'border-gray-300'}"
 										style="background-color: {color.hex}"
+										onclick={() => (chosenColors = { ...chosenColors, [product.id]: colorIdx })}
 										title={color.name}
 									></button>
 								{/each}
@@ -409,23 +529,19 @@
 				{/if}
 			{/each}
 
-			<!-- 4. In-Grid Editorial Break (after 3rd product) -->
+			<!-- 4. In-grid editorial break (after the 3rd product): a photo and one line -->
 			{#if filteredProducts.length > 3}
 				<div class="my-16 py-24 bg-gray-50 border-y border-gray-200">
 					<div class="max-w-4xl mx-auto text-center px-8">
-						<div class="aspect-video bg-gray-100 border border-gray-200 mb-6 relative flex items-center justify-center">
-							<div class="text-center">
-								<Play class="w-12 h-12 text-gray-400 mx-auto mb-4" />
-								<p class="text-sm text-gray-400">[ATMOSPHERIC VIDEO]</p>
-								<p class="text-xs text-gray-500 mt-2">Close-up: fabric texture, water, craftsmanship</p>
-								<p class="text-xs text-gray-400 mt-1">10-15sec loop | 1280 x 720px</p>
-							</div>
+						<div class="relative aspect-[16/9] border border-gray-200 bg-gray-100 mb-8 overflow-hidden">
+							<img
+								src={photos.editorial}
+								alt=""
+								loading="lazy"
+								class="absolute inset-0 h-full w-full object-cover object-[50%_72%]"
+							/>
 						</div>
-						<p class="text-xl italic font-serif text-gray-700 leading-relaxed">
-							"Each stitch is a testament to Italian craftsmanship. We obsess over the details so
-							you can simply enjoy the experience."
-						</p>
-						<p class="text-xs text-gray-400 mt-4">[Craftsmanship editorial break]</p>
+						<p class="text-xl italic font-serif text-gray-700 leading-relaxed">Made for long days by the water.</p>
 					</div>
 				</div>
 			{/if}
@@ -463,47 +579,45 @@
 		</section>
 	{/if}
 
-	<!-- 6. Fit Concierge Footer Section -->
+	<!-- 6. Help strip: size guide, delivery, contact -->
 	<section class="border-t-2 border-gray-900 bg-white py-16">
 		<div class="max-w-5xl mx-auto px-8">
 			<div class="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
 				<div class="space-y-4">
 					<div class="w-16 h-16 border-2 border-gray-900 mx-auto flex items-center justify-center">
-						<span class="text-xs text-gray-400">[ICON]</span>
+						<Ruler class="w-7 h-7" strokeWidth={1.5} />
 					</div>
 					<h3 class="text-sm tracking-[0.2em] uppercase">Find Your Size</h3>
 					<p class="text-sm text-gray-600 leading-relaxed">
-						Not sure what fits? Our interactive size guide helps you find your perfect match.
+						Not sure what fits? The size guide shows how to measure and which size to choose.
 					</p>
-					<button class="text-xs tracking-wider uppercase underline hover:opacity-70 transition-opacity">
+					<a href="/customer-care" class="inline-block text-xs tracking-wider uppercase underline hover:opacity-70 transition-opacity">
 						Size Guide
-					</button>
+					</a>
 				</div>
 
 				<div class="space-y-4">
 					<div class="w-16 h-16 border-2 border-gray-900 mx-auto flex items-center justify-center">
-						<span class="text-xs text-gray-400">[ICON]</span>
+						<Truck class="w-7 h-7" strokeWidth={1.5} />
 					</div>
-					<h3 class="text-sm tracking-[0.2em] uppercase">Personal Styling Advice</h3>
-					<p class="text-sm text-gray-600 leading-relaxed">
-						Book a complimentary virtual consultation with one of our swimwear stylists.
-					</p>
-					<button class="text-xs tracking-wider uppercase underline hover:opacity-70 transition-opacity">
-						Book Now
-					</button>
+					<h3 class="text-sm tracking-[0.2em] uppercase">Delivery</h3>
+					<p class="text-sm text-gray-600 leading-relaxed">{site.deliveryNote}</p>
+					<a href="/customer-care" class="inline-block text-xs tracking-wider uppercase underline hover:opacity-70 transition-opacity">
+						Shipping &amp; Returns
+					</a>
 				</div>
 
 				<div class="space-y-4">
 					<div class="w-16 h-16 border-2 border-gray-900 mx-auto flex items-center justify-center">
-						<span class="text-xs text-gray-400">[ICON]</span>
+						<MessageCircle class="w-7 h-7" strokeWidth={1.5} />
 					</div>
-					<h3 class="text-sm tracking-[0.2em] uppercase">Worldwide Express</h3>
+					<h3 class="text-sm tracking-[0.2em] uppercase">Need Help?</h3>
 					<p class="text-sm text-gray-600 leading-relaxed">
-						Free express shipping on all orders over $150. Arrives in 2-5 business days.
+						Questions about fit or your order? Write to us and we'll help.
 					</p>
-					<button class="text-xs tracking-wider uppercase underline hover:opacity-70 transition-opacity">
-						Learn More
-					</button>
+					<a href={contactHref} class="inline-block text-xs tracking-wider uppercase underline hover:opacity-70 transition-opacity">
+						Contact Us
+					</a>
 				</div>
 			</div>
 		</div>

@@ -2,12 +2,13 @@
 	import { Metadata } from '$lib/components/ui/seo';
 	import { page } from '$app/state';
 	import { getProductsQuery } from 'sveltekit-medusa-sdk';
-	import { toCatalogProduct, formatPrice, PRODUCT_FIELDS } from '$lib/medusa/catalog';
+	import { toCatalogProduct, formatPrice, previewMedia, PRODUCT_FIELDS, type CatalogProduct } from '$lib/medusa/catalog';
 	import { safe } from '$lib/medusa/safe';
 	import ProductMedia from '$lib/components/ProductMedia.svelte';
 
 	let searchTerm = $derived(page.url.searchParams.get('q') || '');
 	let hoveredProductColors = $state<{ [key: string]: number }>({});
+	let chosenColors = $state<{ [key: string]: number }>({});
 
 	// Server-side search: Medusa matches the term against product titles and descriptions.
 	// The "Curated for You" fallback shows the newest products when nothing matches.
@@ -28,8 +29,14 @@
 	let searchResults = $derived(results.data?.found ?? []);
 	const topSelling = $derived(results.data?.curated ?? []);
 
-	function getActiveColorIndex(productId: string) {
-		return hoveredProductColors[productId] || 0;
+	// Hover previews a color on a card, a click keeps it; the product page then opens on that color.
+	function getActiveColorIndex(product: CatalogProduct) {
+		return hoveredProductColors[product.id] ?? chosenColors[product.id] ?? 0;
+	}
+
+	function productHref(product: CatalogProduct, colorIndex: number) {
+		const color = product.colors[colorIndex]?.name;
+		return '/product/' + product.handle + (color && product.colors.length > 1 ? '?color=' + encodeURIComponent(color) : '');
 	}
 </script>
 
@@ -53,7 +60,7 @@
 				{#each topSelling as product (product.id)}
 					<a href={`/product/${product.handle}`} class="group">
 						<div class="aspect-[3/4] bg-gray-100 border border-gray-200 mb-4 relative overflow-hidden">
-							<ProductMedia src={product.media[0]} poster={product.images[0]} alt={product.name} label="[PRODUCT IMAGE]" />
+							<ProductMedia src={product.media[0]} poster={product.images[0]} alt={product.name} />
 							<div class="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
 						</div>
 
@@ -101,22 +108,22 @@
 			<div class="space-y-16">
 				{#each searchResults as product, index (product.id)}
 					{@const patternIndex = index % 4}
-					{@const activeColorIndex = getActiveColorIndex(product.id)}
+					{@const activeColorIndex = getActiveColorIndex(product)}
 
 					{#if patternIndex === 0}
 						<div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
 							<a
-								href={`/product/${product.handle}`}
+								href={productHref(product, activeColorIndex)}
 								class="lg:col-span-3 aspect-[3/4] bg-gray-100 border border-gray-200 relative group overflow-hidden"
 							>
-								<ProductMedia src={product.media[0]} poster={product.images[0]} alt={product.name} label="[HERO PRODUCT IMAGE]" />
+								<ProductMedia src={previewMedia(product, activeColorIndex)} poster={product.images[0]} alt={product.name} />
 								<div class="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
 							</a>
 
 							<div class="lg:col-span-2 flex flex-col justify-center space-y-6">
 								<div>
 									<a
-										href={`/product/${product.handle}`}
+										href={productHref(product, activeColorIndex)}
 										class="text-2xl md:text-3xl tracking-wide hover:opacity-70 transition-opacity"
 									>
 										{product.name}
@@ -146,7 +153,8 @@
 													? 'border-gray-900 ring-2 ring-gray-300'
 													: 'border-gray-300'}"
 												style="background-color: {color.hex}"
-												title={color.name}
+												onclick={() => (chosenColors = { ...chosenColors, [product.id]: colorIdx })}
+										title={color.name}
 											></button>
 										{/each}
 									</div>
@@ -155,7 +163,7 @@
 								<p class="text-sm text-gray-600 leading-relaxed">{product.description}</p>
 
 								<a
-									href={`/product/${product.handle}`}
+									href={productHref(product, activeColorIndex)}
 									class="inline-block border-2 border-gray-900 px-8 py-3 text-sm tracking-[0.2em] uppercase text-center hover:bg-gray-900 hover:text-white transition-all w-fit"
 								>
 									View Details
@@ -167,19 +175,19 @@
 						{#if nextProduct}
 							<div class="grid grid-cols-1 md:grid-cols-2 gap-8">
 								{#each [product, nextProduct] as prod (prod.id)}
-									{@const prodActiveColorIndex = getActiveColorIndex(prod.id)}
+									{@const prodActiveColorIndex = getActiveColorIndex(prod)}
 									<div>
 										<a
-											href={`/product/${prod.handle}`}
+											href={productHref(prod, prodActiveColorIndex)}
 											class="block aspect-[3/4] bg-gray-100 border border-gray-200 mb-4 relative group overflow-hidden"
 										>
-											<ProductMedia src={prod.media[0]} poster={prod.images[0]} alt={prod.name} label="[PRODUCT IMAGE]" />
+											<ProductMedia src={previewMedia(prod, prodActiveColorIndex)} poster={prod.images[0]} alt={prod.name} />
 											<div class="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
 										</a>
 
 										<div class="space-y-3">
 											<a
-												href={`/product/${prod.handle}`}
+												href={productHref(prod, prodActiveColorIndex)}
 												class="text-lg tracking-wide hover:opacity-70 transition-opacity block"
 											>
 												{prod.name}
@@ -203,7 +211,8 @@
 															? 'border-gray-900'
 															: 'border-gray-300'}"
 														style="background-color: {color.hex}"
-														title={color.name}
+														onclick={() => (chosenColors = { ...chosenColors, [prod.id]: colorIdx })}
+										title={color.name}
 													></button>
 												{/each}
 											</div>
@@ -217,16 +226,16 @@
 					{:else if patternIndex === 3}
 						<div class="max-w-2xl mx-auto">
 							<a
-								href={`/product/${product.handle}`}
+								href={productHref(product, activeColorIndex)}
 								class="block aspect-[3/4] bg-gray-100 border border-gray-200 mb-4 relative group overflow-hidden"
 							>
-								<ProductMedia src={product.media[0]} poster={product.images[0]} alt={product.name} label="[CENTERED PRODUCT IMAGE]" />
+								<ProductMedia src={previewMedia(product, activeColorIndex)} poster={product.images[0]} alt={product.name} />
 								<div class="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
 							</a>
 
 							<div class="text-center space-y-3">
 								<a
-									href={`/product/${product.handle}`}
+									href={productHref(product, activeColorIndex)}
 									class="text-xl tracking-wide hover:opacity-70 transition-opacity block"
 								>
 									{product.name}
@@ -247,7 +256,8 @@
 												? 'border-gray-900'
 												: 'border-gray-300'}"
 											style="background-color: {color.hex}"
-											title={color.name}
+											onclick={() => (chosenColors = { ...chosenColors, [product.id]: colorIdx })}
+										title={color.name}
 										></button>
 									{/each}
 								</div>

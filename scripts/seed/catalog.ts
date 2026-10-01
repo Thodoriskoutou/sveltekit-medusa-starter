@@ -27,6 +27,14 @@ export interface ProductSpec {
 	/** Photo files inside `settings.photosDir`, in gallery order (the first is the hero/thumbnail). */
 	photos: string[];
 	/**
+	 * Which photos show which color, by color name. Each listed photo is attached to that color's variants
+	 * in Medusa (Products → the product → a variant → Media), and the site shows those photos when the
+	 * color is chosen. A photo not listed here is shown for no color (it is only a fallback for a color that has no photos of its own).
+	 * A product with a single color needs no entry: all its photos go to that color.
+	 * (Needs Medusa 2.11.2 or newer.)
+	 */
+	colorPhotos?: Record<string, string[]>;
+	/**
 	 * Optional videos (file names inside `settings.videosDir`, or full https URLs). They're stored in
 	 * the product's metadata as `video`, `video_2`, … which the site plays. Uploading video files
 	 * through Medusa is untested, so if it fails the script tells you and carries on.
@@ -75,14 +83,20 @@ export const products: ProductSpec[] = [
 			{ name: 'Pistachio', code: 'PST' }
 		],
 		photos: [
-			'IMG_1645.jpeg',
 			'IMG_1637.jpeg',
 			'IMG_1643.jpeg',
+			'IMG_1645.jpeg',
+			'4b3228c7-59d0-49b4-a919-0091bff3b4f3.jpeg',
 			'IMG_0424.jpeg',
 			'IMG_0421.jpeg',
-			'BEF574F2-AC3D-4FDE-9653-4465F3B49C46.jpeg',
-			'4b3228c7-59d0-49b4-a919-0091bff3b4f3.jpeg'
-		]
+			'BEF574F2-AC3D-4FDE-9653-4465F3B49C46.jpeg'
+		],
+		// My reading of the pictures: check that each photo shows the color it is listed under.
+		colorPhotos: {
+			Gold: ['IMG_1637.jpeg', 'IMG_1643.jpeg'],
+			Olive: ['IMG_0424.jpeg', 'IMG_0421.jpeg', 'BEF574F2-AC3D-4FDE-9653-4465F3B49C46.jpeg'],
+			Pistachio: ['IMG_1645.jpeg', '4b3228c7-59d0-49b4-a919-0091bff3b4f3.jpeg']
+		}
 	},
 	{
 		code: 'RSB',
@@ -100,7 +114,11 @@ export const products: ProductSpec[] = [
 			'IMG_1595.jpeg',
 			'IMG_9749.jpeg',
 			'IMG_9607.jpeg'
-		]
+		],
+		colorPhotos: {
+			Pink: ['ps_B224D650-82F7-4D5B-A344-9F284EA63908.jpeg', 'IMG_1595.jpeg'],
+			Copper: ['IMG_9749.jpeg', 'IMG_9607.jpeg']
+		}
 	},
 	{
 		code: 'HWB',

@@ -2,16 +2,22 @@
 	// Account: the Wild Coral account pages, on the customer's real Medusa data.
 	//
 	// Signed out → the split sign-in / register screen (the registry's auth forms, styled to the
-	// design). Signed in → welcome, orders, profile and saved addresses. The customer is read with
-	// `getCustomer()`; the auth forms refresh that query on success, so the page swaps views on its own.
-	import { getCustomer, updateCustomer, getOrders, getAddresses, deleteAddress } from 'sveltekit-medusa-sdk';
+	// design). Signed in → welcome, orders (each opens its tracking page), profile and saved
+	// addresses. The customer is read with `getCustomer()`; the auth forms refresh that query on
+	// success, so the page swaps views on its own.
+	import { getCustomer, updateCustomer, getAddresses, deleteAddress, getProductQuery } from 'sveltekit-medusa-sdk';
 	import * as Auth from '$lib/components/ui/auth';
 	import { logout } from 'sveltekit-medusa-sdk/auth';
 	import { Metadata } from '$lib/components/ui/seo';
-	import { formatPrice } from '$lib/medusa/catalog';
-	import { safe } from '$lib/medusa/safe';
-	import { dev } from '$app/env';
+	import { getMyOrders } from '$lib/medusa/tracking.remote';
+	import { getSavedProductIds } from '$lib/medusa/wishlist.remote';
+	import { wishlist } from '$lib/medusa/wishlist-state.svelte';
+	import { toCatalogProduct, formatPrice, PRODUCT_FIELDS } from '$lib/medusa/catalog';
 	import ProductMedia from '$lib/components/ProductMedia.svelte';
+	import { safe } from '$lib/medusa/safe';
+	import { photos } from '$lib/site';
+	import { dev } from '$app/env';
+	import OrderCard from '$lib/components/account/OrderCard.svelte';
 
 	// Wireframe styling for the registry's form parts.
 	const labelClass = 'text-xs tracking-[0.2em] uppercase block mb-2 text-gray-700';
@@ -24,25 +30,58 @@
 	let mode = $state<Mode>('login');
 	let forgotSent = $state(false);
 
+	// The wishlist plugin stores product ids; the products themselves are read from the catalog.
+	async function loadSavedProducts() {
+		const { productIds } = await getSavedProductIds();
+		const products = await Promise.all(
+			productIds.slice(0, 24).map((id) => getProductQuery({ id, fields: PRODUCT_FIELDS }).catch(() => null))
+		);
+		return products.filter((p) => !!p).map(toCatalogProduct);
+	}
+
+	async function removeSaved(productId: string) {
+		if ((await wishlist.set(productId, false)) === 'removed') removedIds = [...removedIds, productId];
+	}
+
 	// One request round: the customer first, then (only if signed in) orders and addresses in
 	// parallel. Orders/addresses fail independently, so a hiccup there doesn't hide the account.
 	const account = $derived(
 		await safe(async () => {
 			const customer = await getCustomer();
-			if (!customer) return { customer: null, orders: null, addresses: null };
-			const [orders, addresses] = await Promise.all([safe(() => getOrders()), safe(() => getAddresses())]);
-			return { customer, orders, addresses };
+			if (!customer) return { customer: null, orders: null, addresses: null, saved: null };
+			const [orders, addresses, saved] = await Promise.all([
+				safe(() => getMyOrders()),
+				safe(() => getAddresses()),
+				safe(loadSavedProducts)
+			]);
+			return { customer, orders, addresses, saved };
 		})
 	);
 	const customer = $derived(account.data?.customer ?? null);
 	const ordersResult = $derived(account.data?.orders ?? { data: null, error: null });
 	const addressesResult = $derived(account.data?.addresses ?? { data: null, error: null });
+	const savedResult = $derived(account.data?.saved ?? { data: null, error: null });
+	// Products the customer removed here disappear at once, before the list is fetched again.
+	let removedIds = $state<string[]>([]);
+	const savedProducts = $derived((savedResult.data ?? []).filter((p) => !removedIds.includes(p.id)));
 	const orders = $derived(ordersResult.data ?? []);
 	const addresses = $derived(addressesResult.data ?? []);
+	const openOrders = $derived(orders.filter((o) => o.phase === 'processing' || o.phase === 'shipped').length);
 
 	const displayName = $derived(
 		[customer?.first_name, customer?.last_name].filter(Boolean).join(' ') || customer?.email?.split('@')[0] || ''
 	);
+
+	// Sign-up: Medusa's register call takes only an email and password, so the name typed here is
+	// saved to the new customer right after the account is created (see `onregistered`). These two
+	// inputs have no `name`, so they are not sent along with the form itself.
+	let signUpFirst = $state('');
+	let signUpLast = $state('');
+	async function saveNameAfterSignUp() {
+		const first_name = signUpFirst.trim();
+		const last_name = signUpLast.trim();
+		if (first_name || last_name) await updateCustomer({ first_name, last_name });
+	}
 
 	// Profile editing
 	let editing = $state(false);
@@ -92,15 +131,12 @@
 		try {
 			await logout();
 			await getCustomer().refresh();
+			void wishlist.load(true);
 			mode = 'login';
 		} finally {
 			signingOut = false;
 		}
 	}
-
-	const statusLabel = (s: string | undefined) => (s ? s.replace(/_/g, ' ') : '');
-	const fmtDate = (d: string | Date) =>
-		new Date(d).toLocaleDateString('en', { year: 'numeric', month: 'long', day: 'numeric' });
 </script>
 
 <Metadata config={{ title: 'Account', noindex: true }} />
@@ -109,18 +145,12 @@
 	<div class="min-h-screen bg-white">
 		<div class="grid grid-cols-1 lg:grid-cols-2 min-h-screen">
 			<div class="relative bg-gray-900 min-h-[50vh] lg:min-h-screen">
-				<div class="absolute inset-0 flex items-center justify-center">
-					<div class="text-center text-white/20">
-						<p class="text-sm mb-2">[LIFESTYLE IMAGE]</p>
-						<p class="text-xs">1200 x 1600px</p>
-						<p class="text-xs mt-4">Serene poolside moment</p>
-					</div>
-				</div>
+				<img src={photos.account} alt="" class="absolute inset-0 h-full w-full object-cover object-[50%_25%]" />
 				<div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-12">
 					<div class="text-white max-w-md">
 						<h2 class="text-3xl font-serif mb-4 leading-tight">Your Personal Sanctuary</h2>
 						<p class="text-sm leading-relaxed opacity-90">
-							Access your orders and details — all in one place.
+							Track your orders and keep your details — all in one place.
 						</p>
 					</div>
 				</div>
@@ -165,7 +195,7 @@
 						</Auth.LoginForm>
 
 						<div class="mt-8 pt-8 border-t border-gray-200 text-center">
-							<p class="text-sm text-gray-600 mb-4">New here?</p>
+							<p class="text-sm text-gray-600 mb-4">New here? Create an account to track your orders.</p>
 							<button onclick={() => (mode = 'register')} class="text-sm underline hover:opacity-70 transition-opacity">
 								Create an Account
 							</button>
@@ -174,7 +204,17 @@
 						<h1 class="text-4xl font-serif mb-2">Join the Muse List</h1>
 						<p class="text-sm text-gray-600 mb-12">Create your account</p>
 
-						<Auth.RegisterForm class="space-y-6">
+						<Auth.RegisterForm class="space-y-6" onregistered={saveNameAfterSignUp}>
+							<div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+								<div>
+									<label for="signup-first" class={labelClass}>First Name</label>
+									<input id="signup-first" class={inputClass} bind:value={signUpFirst} autocomplete="given-name" />
+								</div>
+								<div>
+									<label for="signup-last" class={labelClass}>Last Name</label>
+									<input id="signup-last" class={inputClass} bind:value={signUpLast} autocomplete="family-name" />
+								</div>
+							</div>
 							<Auth.Field name="email">
 								<Auth.Label class={labelClass}>Email Address</Auth.Label>
 								<Auth.Input type="email" autocomplete="email" class={inputClass} />
@@ -182,7 +222,8 @@
 							</Auth.Field>
 							<Auth.Field name="password">
 								<Auth.Label class={labelClass}>Password</Auth.Label>
-								<Auth.Input type="password" autocomplete="new-password" class={inputClass} />
+								<Auth.Input type="password" autocomplete="new-password" minlength={8} class={inputClass} />
+								<p class="mt-2 text-xs text-gray-500">At least 8 characters.</p>
 								<Auth.Error />
 							</Auth.Field>
 							<Auth.Error />
@@ -237,15 +278,28 @@
 		<div class="h-32"></div>
 
 		<div class="max-w-7xl mx-auto px-8 md:px-16 lg:px-24 pb-32">
-			<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-24">
+			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-24">
 				<a href="/shop" class="border-2 border-gray-200 p-8 hover:border-gray-900 transition-colors group">
 					<h3 class="text-lg font-serif mb-2 group-hover:opacity-70 transition-opacity">Continue Shopping</h3>
 					<p class="text-sm text-gray-600">Explore new arrivals</p>
 				</a>
 
 				<a href="#orders" class="border-2 border-gray-200 p-8 hover:border-gray-900 transition-colors group text-left">
-					<h3 class="text-lg font-serif mb-2 group-hover:opacity-70 transition-opacity">Your Orders</h3>
-					<p class="text-sm text-gray-600">View your order history</p>
+					<h3 class="text-lg font-serif mb-2 group-hover:opacity-70 transition-opacity">Track Your Orders</h3>
+					<p class="text-sm text-gray-600">
+						{#if openOrders}
+							{openOrders} {openOrders === 1 ? 'order' : 'orders'} on the way
+						{:else}
+							View your order history
+						{/if}
+					</p>
+				</a>
+
+				<a href="#wishlist" class="border-2 border-gray-200 p-8 hover:border-gray-900 transition-colors group text-left">
+					<h3 class="text-lg font-serif mb-2 group-hover:opacity-70 transition-opacity">Wishlist</h3>
+					<p class="text-sm text-gray-600">
+						{savedProducts.length ? `${savedProducts.length} saved ${savedProducts.length === 1 ? 'piece' : 'pieces'}` : 'Pieces you love, saved for later'}
+					</p>
 				</a>
 
 				<a href="/customer-care" class="border-2 border-gray-200 p-8 hover:border-gray-900 transition-colors group text-left">
@@ -274,34 +328,45 @@
 				{:else}
 					<div class="space-y-6">
 						{#each orders as order (order.id)}
-							<div class="border-2 border-gray-200 p-6">
-								<div class="flex items-start justify-between mb-6">
-									<div>
-										<h3 class="text-lg mb-1">Order #{order.display_id ?? order.id}</h3>
-										<p class="text-sm text-gray-600">{fmtDate(order.created_at)}</p>
-									</div>
-									<div class="text-right">
-										<p class="text-lg mb-1">
-											{formatPrice(order.total, (order.currency_code ?? 'eur').toUpperCase())}
-										</p>
-										<span class="text-xs tracking-wider uppercase text-green-700">{statusLabel(order.status)}</span>
-									</div>
-								</div>
+							<OrderCard {order} />
+						{/each}
+					</div>
+				{/if}
+			</div>
 
-								{#if order.items?.length}
-									<div class="flex space-x-4 overflow-x-auto pb-2">
-										{#each order.items as item (item.id)}
-											<a href={item.product_handle ? `/product/${item.product_handle}` : '/shop'} class="flex-shrink-0 w-24 group">
-												<div class="relative w-24 h-32 bg-gray-100 border border-gray-200 mb-2 overflow-hidden">
-													<ProductMedia src={item.thumbnail} alt={item.product_title ?? item.title} label="[Img]" />
-												</div>
-												<p class="text-xs text-gray-600 line-clamp-2 group-hover:opacity-70 transition-opacity">
-													{item.product_title ?? item.title}
-												</p>
-											</a>
-										{/each}
+			<div id="wishlist" class="mb-24 scroll-mt-32">
+				<h2 class="text-3xl font-serif mb-8">Wishlist</h2>
+
+				{#if savedResult.error}
+					<p class="text-sm text-gray-600">{dev ? savedResult.error : 'Your wishlist could not be loaded right now.'}</p>
+				{:else if savedProducts.length === 0}
+					<div class="border-2 border-gray-200 p-12 text-center">
+						<p class="text-gray-600 mb-6">Nothing saved yet. Tap “Save for Later” on a piece you love.</p>
+						<a
+							href="/shop"
+							class="inline-block border-2 border-gray-900 px-8 py-3 text-sm tracking-[0.2em] uppercase hover:bg-gray-900 hover:text-white transition-all"
+						>
+							Explore Collection
+						</a>
+					</div>
+				{:else}
+					<div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+						{#each savedProducts as product (product.id)}
+							<div class="group">
+								<a href="/product/{product.handle}" class="block">
+									<div class="relative aspect-[4/5] bg-gray-100 border border-gray-200 mb-3 overflow-hidden">
+										<ProductMedia src={product.media[0]} poster={product.images[0]} alt={product.name} />
 									</div>
-								{/if}
+									<p class="text-sm group-hover:opacity-70 transition-opacity">{product.name}</p>
+									<p class="text-sm text-gray-600">{formatPrice(product.price, product.currency)}</p>
+								</a>
+								<button
+									onclick={() => removeSaved(product.id)}
+									disabled={wishlist.busy === product.id}
+									class="mt-2 text-xs underline text-gray-500 hover:text-gray-900 transition-colors disabled:opacity-50"
+								>
+									Remove
+								</button>
 							</div>
 						{/each}
 					</div>

@@ -96,7 +96,6 @@
 									src={product.media[0]}
 									poster={product.images[0]}
 									alt={product.name}
-									label={`[PRODUCT IMAGE ${index + 1}]`}
 								/>
 								<div
 									class="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -188,7 +187,6 @@
 											src={openMarker.product.media[0]}
 											poster={openMarker.product.images[0]}
 											alt={openMarker.product.name}
-											label="[Img]"
 										/>
 									</div>
 									<div class="flex-grow">
@@ -300,7 +298,6 @@
 									src={product.media[0]}
 									poster={product.images[0]}
 									alt={product.name}
-									label={index === 0 || index === 3 ? '[PORTRAIT]' : '[SQUARE]'}
 								/>
 								<div
 									class="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"

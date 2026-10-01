@@ -676,7 +676,7 @@
 								<p class="text-xs tracking-[0.2em] uppercase text-gray-700 mb-4">Text Variant</p>
 								<div class="space-y-3">
 									<WishlistButton productId="4" variant="text" size="md" />
-									<WishlistButton productId="5" variant="text" size="md" initialSaved />
+									<WishlistButton productId="5" variant="text" size="md" />
 								</div>
 							</div>
 						</div>

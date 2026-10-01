@@ -9,6 +9,8 @@
 
 	let {
 		messages = registerMessages,
+		onregistered,
+		validate = requirePasswordLength,
 		onsuccess,
 		onswitch,
 		onerror,
@@ -16,6 +18,10 @@
 		children
 	}: {
 		messages?: AuthMessages
+		/** Runs before sending. Return a message to stop and show it, or null to continue. Defaults to requiring a password of at least 8 characters (Medusa itself accepts any length). */
+		validate?: (values: Record<string, unknown>) => string | null
+		/** Runs once the account exists and is signed in, before the customer query refreshes: the place to save extra details (e.g. the name) so the page never shows the bare account. A failure here is ignored; the account itself is already created. */
+		onregistered?: () => void | Promise<void>
 		onsuccess?: () => void
 		onswitch?: (mode: string) => void
 		onerror?: (result: AuthResult) => void
@@ -23,10 +29,26 @@
 		children: Snippet
 	} = $props()
 
+	const MIN_PASSWORD = 8
+	function requirePasswordLength(values: Record<string, unknown>) {
+		const password = values.password
+		return typeof password === 'string' && password.length > 0 && password.length < MIN_PASSWORD
+			? `Your password needs at least ${MIN_PASSWORD} characters.`
+			: null
+	}
+
 	const auth = createAuthForm(() => ({
 		form: register,
 		messages,
-		onOk: () => getCustomer().refresh(),
+		validate,
+		onOk: async () => {
+			try {
+				await onregistered?.()
+			} catch {
+				// The account is created either way; the customer can add their name later in Account Settings.
+			}
+			await getCustomer().refresh()
+		},
 		onsuccess,
 		onswitch,
 		onerror

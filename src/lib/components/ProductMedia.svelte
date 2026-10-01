@@ -1,6 +1,6 @@
 <script lang="ts">
-	// Renders a product's photo *or video* from Medusa, or the wireframe placeholder when the
-	// product has no media yet. Place it inside a `relative` container.
+	// Renders a product's photo *or video* from Medusa, or a quiet tile with the product's name when
+	// the product has no media yet. Place it inside a `relative` container.
 	//
 	// Videos play like the autoplay clips on fashion sites: muted, looping, inline. They only
 	// run while on screen (a grid of clips would otherwise all decode at once), and visitors who
@@ -10,7 +10,6 @@
 	interface Props {
 		src?: string | null;
 		alt: string;
-		label?: string;
 		/** Still image shown until the video's first frame is ready. */
 		poster?: string | null;
 		/** Show the browser's play / sound controls (used on the product page). */
@@ -21,7 +20,6 @@
 	let {
 		src = null,
 		alt,
-		label = '[PRODUCT IMAGE]',
 		poster = null,
 		controls = false,
 		class: className = ''
@@ -70,8 +68,8 @@
 {:else if src}
 	<img {src} {alt} loading="lazy" class="absolute inset-0 w-full h-full object-cover {className}" />
 {:else}
-	<!-- No photo or video yet: a quiet tile with just the name (`label` is kept for old callers). -->
-	<div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200" title={label}>
+	<!-- No photo or video yet: a quiet tile with just the name. -->
+	<div class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200" title={alt}>
 		<p class="text-center px-6 font-serif italic text-gray-400">{alt}</p>
 	</div>
 {/if}

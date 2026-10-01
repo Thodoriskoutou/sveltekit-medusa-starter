@@ -10,6 +10,8 @@ export interface CreateAuthFormOptions<Input extends RemoteFormInput | void> {
 	messages: AuthMessages
 	/** Runs on a successful (ok) result before `onsuccess` — e.g. `() => getCustomer().refresh()`. */
 	onOk?: () => void | Promise<void>
+	/** Checks the typed values before anything is sent; return a message to block the submit and show it as the form error, or null to go ahead. */
+	validate?: (values: Record<string, unknown>) => string | null
 	onsuccess?: () => void
 	onswitch?: (mode: string) => void
 	onerror?: (result: AuthResult) => void
@@ -44,6 +46,11 @@ export function createAuthForm<Input extends RemoteFormInput | void>(options: ()
 	const enhanced = options().form.enhance(async ({ submit }) => {
 		error = ''
 		const o = options()
+		const problem = o.validate?.((o.form.fields as unknown as { value(): Record<string, unknown> }).value())
+		if (problem) {
+			error = problem
+			return
+		}
 		try {
 			await submit()
 		} catch {

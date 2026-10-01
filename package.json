@@ -11,7 +11,13 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"seed:dry": "node scripts/seed/seed.ts --dry-run",
-		"seed": "node scripts/seed/seed.ts"
+		"seed": "node scripts/seed/seed.ts",
+		"seed:journal:dry": "node scripts/seed/journal.ts --dry-run",
+		"seed:journal": "node scripts/seed/journal.ts",
+		"seed:shipping:dry": "node scripts/seed/shipping.ts --dry-run",
+		"seed:shipping": "node scripts/seed/shipping.ts",
+		"seed:demo-orders:dry": "node scripts/seed/demo-orders.ts --dry-run",
+		"seed:demo-orders": "node scripts/seed/demo-orders.ts"
 	},
 	"devDependencies": {
 		"@internationalized/date": "^3.12.2",

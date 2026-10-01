@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import Play from '@lucide/svelte/icons/play';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
 	import { getProductQuery, getProductsQuery, addToCart } from 'sveltekit-medusa-sdk';
@@ -9,14 +8,21 @@
 		findVariant,
 		isAvailable,
 		formatPrice,
+		mediaForSelection,
+		previewMedia,
 		PRODUCT_FIELDS
 	} from '$lib/medusa/catalog';
 	import { safe } from '$lib/medusa/safe';
+	import { site, photos } from '$lib/site';
 	import { dev } from '$app/env';
 	import ProductMedia from '$lib/components/ProductMedia.svelte';
 	import SizeChartModal from '$lib/components/SizeChartModal.svelte';
 	import StockBadge from '$lib/components/StockBadge.svelte';
 	import WishlistButton from '$lib/components/WishlistButton.svelte';
+	import StarRating from '$lib/components/reviews/StarRating.svelte';
+	import ProductReviews from '$lib/components/reviews/ProductReviews.svelte';
+	import { getProductReviewStats } from '$lib/medusa/reviews.remote';
+	import { formatAverage, type ReviewStats } from '$lib/medusa/reviews';
 	import * as ProductParts from '$lib/components/ui/product';
 	import { Metadata } from '$lib/components/ui/seo';
 
@@ -29,23 +35,64 @@
 				getProductQuery({ slug: handle, fields: PRODUCT_FIELDS }),
 				getProductsQuery({ limit: 4, fields: PRODUCT_FIELDS })
 			]);
+			// Average rating (from the reviews plugin). A hiccup there must not take the product page down.
+			const stats = raw ? (await safe(() => getProductReviewStats({ productId: raw.id }))).data : null;
 			return {
 				raw,
 				product: raw ? toCatalogProduct(raw) : null,
-				others: list.products.map(toCatalogProduct)
+				others: list.products.map(toCatalogProduct),
+				stats
 			};
 		})
 	);
 
 	let product = $derived(result.data?.product ?? null);
+	// The rating loaded with the page, replaced by a fresh one after a review is saved here.
+	let freshStats = $state<{ productId: string; value: ReviewStats | null } | null>(null);
+	const stats = $derived(
+		freshStats && freshStats.productId === product?.id ? freshStats.value : (result.data?.stats ?? null)
+	);
+	async function refreshStats() {
+		if (!product) return;
+		const lookup = getProductReviewStats({ productId: product.id });
+		await lookup.refresh();
+		freshStats = { productId: product.id, value: await lookup };
+	}
 	let relatedProducts = $derived(
 		(result.data?.others ?? []).filter((p) => p.id !== product?.id).slice(0, 2)
 	);
+
+	// Text the shop owner writes in Medusa: Products → the product → Metadata (keys: story, coverage, support,
+	// best_for, style_note, fit_note, composition, sustainability, care). Sections with nothing written are hidden.
+	const metadata = $derived((result.data?.raw?.metadata ?? {}) as Record<string, unknown>);
+	const meta = (key: string) => (typeof metadata[key] === 'string' ? (metadata[key] as string).trim() : '');
+	const story = $derived(meta('story'));
+	const fitNote = $derived(meta('fit_note'));
+	const fitFacts = $derived(
+		[
+			{ label: 'Coverage', value: meta('coverage') },
+			{ label: 'Support', value: meta('support') },
+			{ label: 'Best For', value: meta('best_for') },
+			{ label: 'Style Note', value: meta('style_note') }
+		].filter((fact) => fact.value)
+	);
+	const hasSilhouette = $derived(fitFacts.length > 0);
+	const materialSections = $derived(
+		[
+			// "Material" is a standard product field in the Medusa admin (the Attributes box).
+			{ key: 'composition', title: 'Composition', body: meta('composition') || (result.data?.raw?.material ?? '').trim() },
+			{ key: 'sustainability', title: 'Sustainability', body: meta('sustainability') },
+			{ key: 'care', title: 'Care Instructions', body: meta('care') }
+		].filter((section) => section.body)
+	);
+	const detailImage = $derived(product?.images[1] ?? photos.detail);
+	const contactHref = site.contactEmail ? `mailto:${site.contactEmail}` : '/customer-care';
 
 	let selectedColor = $state(0);
 	let selectedSize = $state('');
 	let quantity = $state(1);
 	let activeTab = $state<'silhouette' | 'fit'>('silhouette');
+	const fitTab = $derived(hasSilhouette ? activeTab : 'fit');
 	let openAccordion = $state<string | null>(null);
 	let showCTABar = $state(false);
 	let sizeChartOpen = $state(false);
@@ -53,7 +100,10 @@
 	// Reset the choices when navigating from one product to another (the component is reused).
 	$effect(() => {
 		void page.params.handle;
-		selectedColor = 0;
+		// Opens on the color that was showing on the shop card (/product/handle?color=Gold), else the first.
+		const wanted = page.url.searchParams.get('color');
+		const index = product?.colors.findIndex((c) => c.name === wanted) ?? -1;
+		selectedColor = index > 0 ? index : 0;
 		selectedSize = '';
 		quantity = 1;
 		cartMessage = null;
@@ -69,14 +119,15 @@
 
 	const activeColor = $derived(product?.colors[selectedColor] ?? null);
 
-	// Gallery: the product's videos and photos from Medusa (videos first), or the wireframe
-	// placeholders when there are none.
-	const placeholderLabels = ['[POWER SHOT]', '[THE SILHOUETTE]', '[BACK DETAIL]', '[CLOSE-UP TEXTURE]'];
-	const slides = $derived(
-		product?.media.length
-			? product.media.map((src) => ({ src, label: '' }))
-			: placeholderLabels.map((label) => ({ src: null, label }))
-	);
+	// Gallery: the product's videos and photos from Medusa (videos first), or one quiet tile while it has none.
+	// Shown for the choice made below: only the pictures of the chosen color (and, once a size is picked too, of
+	// that exact variant), after the product's videos. A product whose variants have no pictures yet shows them all.
+	const slides = $derived.by(() => {
+		const media = product ? mediaForSelection(product, activeColor?.name, selectedVariant) : [];
+		return media.length ? media.map((src) => ({ src })) : [{ src: null }];
+	});
+	// Changes only when the set of pictures does, so the gallery restarts at its first picture on a color change.
+	const galleryKey = $derived(slides.map((s) => s.src ?? '').join('|'));
 
 	// The variant that matches the chosen color + size (size only counts once one is picked).
 	const selectedVariant = $derived(
@@ -149,13 +200,6 @@
 		openAccordion = openAccordion === section ? null : section;
 	}
 
-	const sizeRows = [
-		{ size: 'XS', bust: '32-33', waist: '24-25', hip: '34-35' },
-		{ size: 'S', bust: '34-35', waist: '26-27', hip: '36-37' },
-		{ size: 'M', bust: '36-37', waist: '28-29', hip: '38-39' },
-		{ size: 'L', bust: '38-40', waist: '30-32', hip: '40-42' },
-		{ size: 'XL', bust: '42-44', waist: '34-36', hip: '44-46' }
-	];
 </script>
 
 {#if result.error}
@@ -180,7 +224,19 @@
 	/>
 	<!-- Structured data (schema.org/Product) for search engines; renders nothing visible. -->
 	<ProductParts.Root product={result.data?.raw}>
-		<ProductParts.JsonLd />
+		<!-- The star rating is added only when real approved reviews exist. -->
+		<ProductParts.JsonLd
+			override={stats
+				? {
+						aggregateRating: {
+							'@type': 'AggregateRating',
+							ratingValue: Math.round(stats.average * 10) / 10,
+							reviewCount: stats.count,
+							bestRating: 5
+						}
+					}
+				: undefined}
+		/>
 	</ProductParts.Root>
 
 	<div class="bg-white">
@@ -195,28 +251,20 @@
 		<section class="max-w-7xl mx-auto px-4 md:px-8 lg:px-16 xl:px-24 pb-8 md:pb-16">
 			<div class="grid grid-cols-1 lg:grid-cols-5 gap-8 lg:gap-12">
 				<div class="lg:col-span-3">
+					<!-- Re-created when the color changes, so the gallery starts again at its first picture. -->
+					{#key galleryKey}
 					<div class="lg:hidden">
 						<div class="relative">
 							<div class="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 scrollbar-hide">
 								{#each slides as slide, i (i)}
 									<div class="flex-shrink-0 w-[80vw] aspect-[3/4] bg-gray-100 border border-gray-300 relative overflow-hidden snap-center rounded-sm">
-										<ProductMedia src={slide.src} poster={product.images[0]} controls alt={product.name} label={slide.label} />
+										<ProductMedia src={slide.src} poster={product.images[0]} controls alt={product.name} />
 									</div>
 								{/each}
-
-								<div class="flex-shrink-0 w-[80vw] aspect-[3/4] bg-gray-900 border border-gray-300 relative snap-center rounded-sm">
-									<div class="absolute inset-0 flex items-center justify-center text-white">
-										<div class="text-center">
-											<Play class="w-12 h-12 text-white mb-3 mx-auto opacity-80" />
-											<p class="text-sm text-gray-300 mb-2">[360° VIEW]</p>
-											<p class="text-xs text-gray-400">10-15 sec loop</p>
-										</div>
-									</div>
-								</div>
 							</div>
 
 							<div class="flex justify-center gap-1.5 mt-4">
-								{#each Array.from({ length: slides.length + 1 }, (_, n) => n) as i (i)}
+								{#each Array.from({ length: slides.length }, (_, n) => n) as i (i)}
 									<div class="w-1.5 h-1.5 rounded-full bg-gray-300"></div>
 								{/each}
 							</div>
@@ -226,19 +274,11 @@
 					<div class="hidden lg:block space-y-4">
 						{#each slides as slide, i (i)}
 							<div class="aspect-[3/4] bg-gray-100 border border-gray-300 relative overflow-hidden">
-								<ProductMedia src={slide.src} poster={product.images[0]} controls alt={product.name} label={slide.label} />
+								<ProductMedia src={slide.src} poster={product.images[0]} controls alt={product.name} />
 							</div>
 						{/each}
-
-						<div class="aspect-video bg-gray-900 border border-gray-300 relative flex items-center justify-center">
-							<div class="text-center">
-								<Play class="w-16 h-16 text-gray-400 mx-auto mb-4" />
-								<p class="text-sm text-gray-400 mb-2">[360° VIEW VIDEO]</p>
-								<p class="text-xs text-gray-500">Model walks, spins, shows fit</p>
-								<p class="text-xs text-gray-400 mt-2">10-15sec | 1920 x 1080px</p>
-							</div>
-						</div>
 					</div>
+					{/key}
 				</div>
 
 				<div class="lg:col-span-2">
@@ -256,6 +296,15 @@
 							</div>
 							{#if product.category}
 								<p class="text-sm text-gray-500 mb-4">{product.category}</p>
+							{/if}
+
+							{#if stats}
+								<a href="#reviews" class="mb-4 inline-flex items-center gap-2 transition-opacity hover:opacity-70">
+									<StarRating value={stats.average} size="sm" />
+									<span class="text-sm text-gray-600">
+										{formatAverage(stats.average)} · {stats.count} {stats.count === 1 ? 'review' : 'reviews'}
+									</span>
+								</a>
 							{/if}
 
 							<div class="mb-4">
@@ -359,199 +408,136 @@
 							<WishlistButton productId={product.id} size="md" variant="text" class="text-xs" />
 						</div>
 
-						<p class="text-xs text-center text-gray-500">Fits true to size.</p>
+						{#if fitNote}
+							<p class="text-xs text-center text-gray-500">{fitNote}</p>
+						{/if}
 					</div>
 				</div>
 			</div>
 		</section>
 
-		<!-- 2. The "Art of the Stitch" - Full Width -->
-		<section class="relative py-32 my-16 overflow-hidden bg-gray-900">
-			<div class="absolute inset-0">
-				<div class="w-full h-full flex items-center justify-center">
-					<div class="text-center text-white/20">
-						<p class="text-sm mb-2">[MACRO VIDEO BACKGROUND]</p>
-						<p class="text-xs">Extreme close-up: fabric weave, thread shimmer</p>
-						<p class="text-xs mt-2">1920 x 1080px | Silent loop</p>
-					</div>
-				</div>
-			</div>
+		<!-- 2. Detail band: a photo and, when one is written in Medusa (product metadata "story"), the story of the piece -->
+		<section class="relative my-16 overflow-hidden bg-gray-900 py-32">
+			<img
+				src={detailImage}
+				alt=""
+				loading="lazy"
+				class="absolute inset-0 h-full w-full object-cover object-[50%_60%] opacity-50"
+			/>
 
 			<div class="relative z-10 max-w-3xl mx-auto px-8 text-center text-white">
-				<h2 class="text-4xl md:text-5xl font-serif italic mb-8 leading-tight">The Art of the Stitch</h2>
-				<p class="text-xl leading-relaxed mb-4">Italian-Sourced. Hand-Finished in Milan.</p>
-				<p class="text-xl leading-relaxed">Designed to Last a Lifetime.</p>
-				<p class="text-xs text-white/40 mt-8">[Justifies premium pricing through quality proof]</p>
+				<h2 class="text-4xl md:text-5xl font-serif italic leading-tight">In the Details</h2>
+				{#if story}
+					<p class="mt-8 text-xl leading-relaxed whitespace-pre-line">{story}</p>
+				{/if}
 			</div>
 		</section>
 
-		<!-- 3. The "Perfect Fit" Interactive Concierge -->
+		<!-- 3. Fit: what is written about this cut in Medusa (product metadata), and the size chart -->
 		<section class="max-w-4xl mx-auto px-8 md:px-16 py-24">
 			<h2 class="text-3xl md:text-4xl tracking-wide mb-12 text-center">Perfect Fit Concierge</h2>
 
-			<div class="flex border-b-2 border-gray-200 mb-8">
-				<button
-					onclick={() => (activeTab = 'silhouette')}
-					class="flex-1 pb-4 text-sm tracking-[0.2em] uppercase transition-all {activeTab ===
-					'silhouette'
-						? 'border-b-2 border-gray-900 -mb-0.5 font-medium'
-						: 'text-gray-500 hover:text-gray-900'}"
-				>
-					The Silhouette
-				</button>
-				<button
-					onclick={() => (activeTab = 'fit')}
-					class="flex-1 pb-4 text-sm tracking-[0.2em] uppercase transition-all {activeTab === 'fit'
-						? 'border-b-2 border-gray-900 -mb-0.5 font-medium'
-						: 'text-gray-500 hover:text-gray-900'}"
-				>
-					The Fit Guide
-				</button>
-			</div>
+			{#if hasSilhouette}
+				<div class="flex border-b-2 border-gray-200 mb-8">
+					<button
+						onclick={() => (activeTab = 'silhouette')}
+						class="flex-1 pb-4 text-sm tracking-[0.2em] uppercase transition-all {fitTab === 'silhouette'
+							? 'border-b-2 border-gray-900 -mb-0.5 font-medium'
+							: 'text-gray-500 hover:text-gray-900'}"
+					>
+						The Silhouette
+					</button>
+					<button
+						onclick={() => (activeTab = 'fit')}
+						class="flex-1 pb-4 text-sm tracking-[0.2em] uppercase transition-all {fitTab === 'fit'
+							? 'border-b-2 border-gray-900 -mb-0.5 font-medium'
+							: 'text-gray-500 hover:text-gray-900'}"
+					>
+						The Fit Guide
+					</button>
+				</div>
+			{/if}
 
 			<div class="bg-gray-50 border border-gray-200 p-8">
-				{#if activeTab === 'silhouette'}
+				{#if fitTab === 'silhouette'}
 					<div class="space-y-6">
-						<h3 class="text-xl tracking-wide">How This Cut Enhances Your Form</h3>
-						<p class="text-sm text-gray-700 leading-relaxed">
-							The {product.name} is designed with a sculptural approach to fit. The cut follows the
-							natural curves of the body, creating a streamlined silhouette that flatters without
-							restricting movement.
-						</p>
-						<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
-							<div>
-								<h4 class="text-xs tracking-[0.2em] uppercase mb-2 text-gray-900">Coverage</h4>
-								<p class="text-sm text-gray-600">[Content] Medium coverage with adjustable fit options</p>
-							</div>
-							<div>
-								<h4 class="text-xs tracking-[0.2em] uppercase mb-2 text-gray-900">Support</h4>
-								<p class="text-sm text-gray-600">[Content] Structured with built-in shelf support</p>
-							</div>
-							<div>
-								<h4 class="text-xs tracking-[0.2em] uppercase mb-2 text-gray-900">Best For</h4>
-								<p class="text-sm text-gray-600">[Content] Pool lounging, beach activities, resort wear</p>
-							</div>
-							<div>
-								<h4 class="text-xs tracking-[0.2em] uppercase mb-2 text-gray-900">Style Note</h4>
-								<p class="text-sm text-gray-600">[Content] Pairs beautifully with high-waist bottoms</p>
-							</div>
+						<h3 class="text-xl tracking-wide">About This Cut</h3>
+						<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+							{#each fitFacts as fact (fact.label)}
+								<div>
+									<h4 class="text-xs tracking-[0.2em] uppercase mb-2 text-gray-900">{fact.label}</h4>
+									<p class="text-sm text-gray-600">{fact.value}</p>
+								</div>
+							{/each}
 						</div>
 					</div>
 				{:else}
 					<div class="space-y-6">
 						<h3 class="text-xl tracking-wide">Find Your Perfect Size</h3>
-						<p class="text-sm text-gray-700 leading-relaxed mb-6">
-							Our pieces are designed to fit true to size. If you're between sizes or prefer a more
-							relaxed fit, we recommend sizing up.
+						<p class="text-sm text-gray-700 leading-relaxed">
+							{fitNote || 'Between sizes, or not sure? Write to us and we’ll help you choose.'}
 						</p>
 
-						<div class="overflow-x-auto">
-							<table class="w-full text-sm border border-gray-200">
-								<thead class="bg-gray-100">
-									<tr>
-										<th class="border border-gray-200 px-4 py-3 text-left text-xs tracking-[0.2em] uppercase">Size</th>
-										<th class="border border-gray-200 px-4 py-3 text-left text-xs tracking-[0.2em] uppercase">Bust (in)</th>
-										<th class="border border-gray-200 px-4 py-3 text-left text-xs tracking-[0.2em] uppercase">Waist (in)</th>
-										<th class="border border-gray-200 px-4 py-3 text-left text-xs tracking-[0.2em] uppercase">Hip (in)</th>
-									</tr>
-								</thead>
-								<tbody>
-									{#each sizeRows as row (row.size)}
-										<tr class="hover:bg-gray-50">
-											<td class="border border-gray-200 px-4 py-3 font-medium">{row.size}</td>
-											<td class="border border-gray-200 px-4 py-3">{row.bust}</td>
-											<td class="border border-gray-200 px-4 py-3">{row.waist}</td>
-											<td class="border border-gray-200 px-4 py-3">{row.hip}</td>
+						{#if site.sizeChart.length}
+							<div class="overflow-x-auto">
+								<table class="w-full text-sm border border-gray-200">
+									<thead class="bg-gray-100">
+										<tr>
+											<th class="border border-gray-200 px-4 py-3 text-left text-xs tracking-[0.2em] uppercase">Size</th>
+											<th class="border border-gray-200 px-4 py-3 text-left text-xs tracking-[0.2em] uppercase">Bust ({site.sizeChartUnit})</th>
+											<th class="border border-gray-200 px-4 py-3 text-left text-xs tracking-[0.2em] uppercase">Waist ({site.sizeChartUnit})</th>
+											<th class="border border-gray-200 px-4 py-3 text-left text-xs tracking-[0.2em] uppercase">Hips ({site.sizeChartUnit})</th>
 										</tr>
-									{/each}
-								</tbody>
-							</table>
-						</div>
+									</thead>
+									<tbody>
+										{#each site.sizeChart as row (row.size)}
+											<tr class="hover:bg-gray-50">
+												<td class="border border-gray-200 px-4 py-3 font-medium">{row.size}</td>
+												<td class="border border-gray-200 px-4 py-3">{row.bust}</td>
+												<td class="border border-gray-200 px-4 py-3">{row.waist}</td>
+												<td class="border border-gray-200 px-4 py-3">{row.hips}</td>
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
+						{/if}
 
-						<p class="text-xs text-gray-500 mt-4">
-							[Interactive size calculator placeholder - customer inputs measurements]
+						<p class="text-sm">
+							<a href={contactHref} class="underline hover:opacity-70 transition-opacity">Ask us about sizing</a>
 						</p>
 					</div>
 				{/if}
 			</div>
 		</section>
 
-		<!-- 5. The "Materials & Care" Accordion -->
-		<section class="max-w-4xl mx-auto px-8 md:px-16 py-16 border-t border-gray-200">
-			<h2 class="text-3xl md:text-4xl tracking-wide mb-12 text-center">Materials & Care</h2>
+		{#if materialSections.length}
+			<!-- 5. Materials & care: only what has been entered in Medusa for this product -->
+			<section class="max-w-4xl mx-auto px-8 md:px-16 py-16 border-t border-gray-200">
+				<h2 class="text-3xl md:text-4xl tracking-wide mb-12 text-center">Materials & Care</h2>
 
-			<div class="space-y-4">
-				<div class="border-2 border-gray-200">
-					<button
-						onclick={() => toggleAccordion('composition')}
-						class="w-full flex items-center justify-between p-6 hover:bg-gray-50 transition-colors"
-					>
-						<span class="text-sm tracking-[0.2em] uppercase">Composition</span>
-						<ChevronDown class="w-5 h-5 transition-transform {openAccordion === 'composition' ? 'rotate-180' : ''}" />
-					</button>
-					{#if openAccordion === 'composition'}
-						<div class="px-6 pb-6 text-sm text-gray-700 leading-relaxed border-t border-gray-200 pt-6">
-							<p class="mb-4">
-								<strong>80% Recycled Polyamide</strong> — Ultra-soft, chlorine-resistant fabric sourced
-								from regenerated fishing nets and textile waste.
-							</p>
-							<p>
-								<strong>20% Elastane</strong> — High-stretch fiber for shape retention and long-lasting
-								wear. UPF 50+ sun protection.
-							</p>
-							<p class="text-xs text-gray-400 mt-4">[WooCommerce product attributes]</p>
+				<div class="space-y-4">
+					{#each materialSections as section (section.key)}
+						<div class="border-2 border-gray-200">
+							<button
+								onclick={() => toggleAccordion(section.key)}
+								aria-expanded={openAccordion === section.key}
+								class="w-full flex items-center justify-between p-6 hover:bg-gray-50 transition-colors"
+							>
+								<span class="text-sm tracking-[0.2em] uppercase">{section.title}</span>
+								<ChevronDown class="w-5 h-5 transition-transform {openAccordion === section.key ? 'rotate-180' : ''}" />
+							</button>
+							{#if openAccordion === section.key}
+								<div class="px-6 pb-6 text-sm text-gray-700 leading-relaxed border-t border-gray-200 pt-6 whitespace-pre-line">{section.body}</div>
+							{/if}
 						</div>
-					{/if}
+					{/each}
 				</div>
+			</section>
+		{/if}
 
-				<div class="border-2 border-gray-200">
-					<button
-						onclick={() => toggleAccordion('sustainability')}
-						class="w-full flex items-center justify-between p-6 hover:bg-gray-50 transition-colors"
-					>
-						<span class="text-sm tracking-[0.2em] uppercase">Sustainability</span>
-						<ChevronDown class="w-5 h-5 transition-transform {openAccordion === 'sustainability' ? 'rotate-180' : ''}" />
-					</button>
-					{#if openAccordion === 'sustainability'}
-						<div class="px-6 pb-6 text-sm text-gray-700 leading-relaxed border-t border-gray-200 pt-6">
-							<p class="mb-4">
-								<strong>Perfection in Production:</strong> Our swimwear is produced in small batches
-								at a family-owned atelier in Northern Italy, where each piece is inspected by hand.
-							</p>
-							<p class="mb-4">
-								We use <strong>ECONYL® regenerated nylon</strong>, a 100% regenerated fabric made from
-								ocean and landfill waste. For every piece sold, we contribute to ocean cleanup
-								initiatives.
-							</p>
-							<p>Our packaging is 100% plastic-free and fully recyclable.</p>
-							<p class="text-xs text-gray-400 mt-4">[Brand sustainability story]</p>
-						</div>
-					{/if}
-				</div>
-
-				<div class="border-2 border-gray-200">
-					<button
-						onclick={() => toggleAccordion('care')}
-						class="w-full flex items-center justify-between p-6 hover:bg-gray-50 transition-colors"
-					>
-						<span class="text-sm tracking-[0.2em] uppercase">Care Instructions</span>
-						<ChevronDown class="w-5 h-5 transition-transform {openAccordion === 'care' ? 'rotate-180' : ''}" />
-					</button>
-					{#if openAccordion === 'care'}
-						<div class="px-6 pb-6 text-sm text-gray-700 leading-relaxed border-t border-gray-200 pt-6">
-							<ul class="space-y-2">
-								<li>• Rinse in cold water immediately after use</li>
-								<li>• Hand wash with mild detergent</li>
-								<li>• Lay flat to dry in shade (avoid direct sunlight)</li>
-								<li>• Do not wring, bleach, iron, or dry clean</li>
-								<li>• Avoid contact with rough surfaces and Velcro</li>
-							</ul>
-							<p class="text-xs text-gray-400 mt-4">[Product care guide]</p>
-						</div>
-					{/if}
-				</div>
-			</div>
-		</section>
+		<!-- Reviews (product-reviews plugin in Medusa) -->
+		<ProductReviews productId={product.id} {stats} onchange={refreshStats} />
 
 		<!-- 6. The "Styled With" Upsell -->
 		{#if relatedProducts.length > 0}
@@ -563,7 +549,7 @@
 						<div class="group">
 							<a href={`/product/${item.handle}`} class="block mb-6">
 								<div class="aspect-[4/5] bg-gray-100 border border-gray-200 relative overflow-hidden">
-									<ProductMedia src={item.media[0]} poster={item.images[0]} alt={item.name} label="[STYLED PRODUCT IMAGE]" />
+									<ProductMedia src={item.media[0]} poster={item.images[0]} alt={item.name} />
 									<div class="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
 								</div>
 							</a>
@@ -597,7 +583,6 @@
 		<SizeChartModal
 			isOpen={sizeChartOpen}
 			onClose={() => (sizeChartOpen = false)}
-			productType="bikini-top"
 		/>
 
 		<!-- 4. The "Bold Decision" Sticky CTA Bar -->
@@ -606,7 +591,7 @@
 				<div class="max-w-7xl mx-auto px-8 py-4 flex items-center justify-between">
 					<div class="flex items-center space-x-6">
 						<div class="w-16 h-16 bg-gray-800 border border-gray-700 hidden md:block relative overflow-hidden">
-							<ProductMedia src={product.media[0]} poster={product.images[0]} alt={product.name} label="[Img]" class="" />
+							<ProductMedia src={previewMedia(product, selectedColor)} poster={product.images[0]} alt={product.name} class="" />
 						</div>
 						<div>
 							<p class="text-sm tracking-wide">{product.name}</p>

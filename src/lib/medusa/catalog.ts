@@ -10,7 +10,7 @@ import type { StoreProduct, StoreProductVariant } from '@medusajs/types';
  */
 
 /** Fields the storefront requests on top of the SDK's default price field. */
-export const PRODUCT_FIELDS = '*categories,+variants.inventory_quantity';
+export const PRODUCT_FIELDS = '*categories,+variants.inventory_quantity,*variants.images';
 
 export interface CatalogVariant {
 	id: string;
@@ -21,6 +21,10 @@ export interface CatalogVariant {
 	inStock: boolean;
 	/** Stock cap for the quantity picker; null when unlimited (unmanaged or backorderable). */
 	maxQuantity: number | null;
+	/** Photos attached to this variant in Medusa (Products → the product → a variant → Media). Stills only. */
+	images: string[];
+	/** The variant's own thumbnail (the picture its row shows in the Medusa admin). */
+	thumbnail: string | null;
 }
 
 export interface CatalogProduct {
@@ -32,13 +36,19 @@ export interface CatalogProduct {
 	price: number | null;
 	currency: string;
 	category: string;
-	colors: { name: string; hex: string }[];
+	/** Product tags from Medusa (e.g. "sequin", "one-piece"), used by the shop's Style filter. */
+	tags: string[];
+	createdAt: string;
+	/** Each color, with the photos attached to its variants (empty when none are). */
+	colors: { name: string; hex: string; images: string[]; thumbnail: string | null }[];
 	sizes: string[];
 	description: string;
 	/** Still images only (thumbnail first) — for previews, structured data and video posters. */
 	images: string[];
 	/** Everything to show in galleries and cards: videos first, then the images. */
 	media: string[];
+	/** Just the videos (they belong to the product, not to a color). */
+	videos: string[];
 	variants: CatalogVariant[];
 }
 
@@ -112,8 +122,8 @@ export function colorHex(name: string, metadataHex?: unknown): string {
 	return COLOR_HEX[name.trim().toLowerCase()] ?? FALLBACK_HEX;
 }
 
-const isColorOption = (title: string) => /^(colou?r|χρώμα)$/i.test(title.trim());
-const isSizeOption = (title: string) => /^(size|μέγεθος)$/i.test(title.trim());
+const isColorOption = (title: string) => /^(colou?rs?|χρώματα?|χρώμα)$/i.test(title.trim());
+const isSizeOption = (title: string) => /^(sizes?|μέγεθος|μεγέθη)$/i.test(title.trim());
 
 function variantInStock(v: StoreProductVariant): boolean {
 	if (v.manage_inventory === false || v.allow_backorder) return true;
@@ -143,7 +153,11 @@ export function toCatalogProduct(p: StoreProduct): CatalogProduct {
 			size: valueOf(v, sizeOption?.id),
 			price: typeof amount === 'number' ? amount : null,
 			inStock: variantInStock(v),
-			maxQuantity: variantMaxQuantity(v)
+			maxQuantity: variantMaxQuantity(v),
+			thumbnail: (v as { thumbnail?: string | null }).thumbnail || null,
+			images: ((v as { images?: { url?: string }[] }).images ?? [])
+				.map((i) => i.url ?? '')
+				.filter((url) => url && !isVideoUrl(url))
 		};
 	});
 
@@ -165,10 +179,17 @@ export function toCatalogProduct(p: StoreProduct): CatalogProduct {
 		price: prices.length ? Math.min(...prices) : null,
 		currency: currency.toUpperCase(),
 		category: p.categories?.[0]?.name ?? '',
+		tags: (p.tags ?? []).map((t) => t.value).filter(Boolean),
+		createdAt: p.created_at ? String(p.created_at) : '',
 		colors: (colorOption?.values ?? [])
 			.slice()
 			.sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0))
-			.map((v) => ({ name: v.value, hex: colorHex(v.value, v.metadata?.hex) })),
+			.map((v) => ({
+				name: v.value,
+				hex: colorHex(v.value, v.metadata?.hex),
+				images: images.filter((url) => variants.some((variant) => variant.color === v.value && variant.images.includes(url))),
+				thumbnail: variants.find((variant) => variant.color === v.value && variant.thumbnail)?.thumbnail ?? null
+			})),
 		sizes: (sizeOption?.values ?? [])
 			.slice()
 			.sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0))
@@ -176,8 +197,41 @@ export function toCatalogProduct(p: StoreProduct): CatalogProduct {
 		description: p.description ?? '',
 		images,
 		media: [...videos, ...images],
+		videos,
 		variants
 	};
+}
+
+/**
+ * What to show for a chosen color: the product's videos, then ONLY that color's own pictures.
+ *   1. the photos attached to that color's variants in Medusa;
+ *   2. else the color's thumbnail (a single picture);
+ *   3. else (nothing is known about this color) the photos that belong to no color at all, or, when every
+ *      photo belongs to some color, all of them rather than an empty gallery.
+ * A product whose variants have no photos or thumbnails yet therefore still shows all its photos.
+ */
+export function mediaForColor(product: CatalogProduct, colorName: string | null | undefined): string[] {
+	const color = product.colors.find((c) => c.name === colorName);
+	if (color?.images.length) return [...product.videos, ...color.images];
+	if (color?.thumbnail) return [...product.videos, color.thumbnail];
+	const belongsToAColor = new Set(product.colors.flatMap((c) => c.images));
+	const general = product.images.filter((url) => !belongsToAColor.has(url));
+	return [...product.videos, ...(general.length ? general : product.images)];
+}
+
+/**
+ * The gallery for the exact choice on the product page: a variant that has pictures of its own (color + size
+ * both picked) shows those; otherwise the chosen color's pictures (see mediaForColor).
+ */
+export function mediaForSelection(product: CatalogProduct, colorName: string | null | undefined, variant?: CatalogVariant): string[] {
+	if (variant?.images.length) return [...product.videos, ...variant.images];
+	return mediaForColor(product, colorName);
+}
+
+/** The picture for a product card showing the given color (the first photo of that color, else the product's first media). */
+export function previewMedia(product: CatalogProduct, colorIndex = 0): string | undefined {
+	const color = product.colors[colorIndex];
+	return color?.images[0] ?? color?.thumbnail ?? product.media[0];
 }
 
 /** The variant for a color + size choice (either may be null when the product has no such option). */

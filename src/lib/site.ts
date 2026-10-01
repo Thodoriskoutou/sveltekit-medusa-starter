@@ -5,6 +5,9 @@
 export const site = {
 	name: 'Wild Coral',
 
+	/** Slug of the Medusa content-plugin collection that holds the Journal posts. */
+	journalCollection: 'journal',
+
 	/**
 	 * Social profiles shown as icons in the footer ("Follow Us"). For each network:
 	 *   - a full URL      → a working link (e.g. 'https://www.instagram.com/yourhandle')
@@ -21,6 +24,27 @@ export const site = {
 	instagramHandle: '',
 	/** Shown on the order-confirmation page, e.g. '#WildCoral'. */
 	hashtag: '#WildCoral',
+
+	/**
+	 * Short intro under the heading on /shop. A category's own description in Medusa
+	 * (Products → Categories → the category → Description) replaces it on that category's page.
+	 */
+	shopIntro: 'Swimwear for long summer days. Explore the collection below.',
+
+	/**
+	 * One line about delivery for the "Delivery" block on /shop, e.g. 'Delivery across Greece from €4.50.'
+	 * Keep it in step with the shipping options in Medusa (Settings → Locations & Shipping).
+	 */
+	deliveryNote: 'Delivery options and prices are shown at checkout.',
+
+	/**
+	 * Your size chart, one row per size, shown in the size guide and on product pages. Measurements are
+	 * body measurements in the unit below. Left empty, the size guide shows no table (and asks customers
+	 * to write to you) rather than showing numbers you haven't confirmed.
+	 *   e.g. { size: 'S', bust: '84–88', waist: '64–68', hips: '90–94' }
+	 */
+	sizeChart: [] as { size: string; bust: string; waist: string; hips: string }[],
+	sizeChartUnit: 'cm',
 
 	/** Public contact email. When set, "Contact Us" and the cart's help link open an email. */
 	contactEmail: '',
@@ -69,5 +93,8 @@ export const photos = {
 	onePiece: '/photos/9A44AF1F-4F83-4919-A384-2431D13ACBE4.jpeg',
 	bikini: '/photos/IMG_1645.jpeg',
 	orderConfirmed: '/photos/IMG_1643.jpeg',
+	account: '/photos/IMG_1637.jpeg',
+	editorial: '/photos/IMG_1595.jpeg',
+	detail: '/photos/IMG_9607.jpeg',
 	notFound: '/photos/4b3228c7-59d0-49b4-a919-0091bff3b4f3.jpeg'
 };

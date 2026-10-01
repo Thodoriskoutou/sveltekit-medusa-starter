@@ -2,12 +2,18 @@
 	interface Props {
 		message?: string;
 		exploreAllLink?: string;
+		/** When given, the button clears the current filters instead of linking away. */
+		onClear?: () => void;
 	}
 
 	let {
 		message = 'No silhouettes match your current selection',
-		exploreAllLink = '/shop'
+		exploreAllLink = '/shop',
+		onClear
 	}: Props = $props();
+
+	const buttonClass =
+		'py-4 px-10 border border-gray-900 text-sm tracking-[0.2em] uppercase font-medium text-gray-900 hover:bg-gray-900 hover:text-white transition-all duration-300';
 </script>
 
 <div class="flex flex-col items-center justify-center py-32 px-8 text-center">
@@ -15,10 +21,9 @@
 		{message}
 	</p>
 
-	<a
-		href={exploreAllLink}
-		class="py-4 px-10 border border-gray-900 text-sm tracking-[0.2em] uppercase font-medium text-gray-900 hover:bg-gray-900 hover:text-white transition-all duration-300"
-	>
-		Explore All
-	</a>
+	{#if onClear}
+		<button onclick={onClear} class={buttonClass}>Clear Filters</button>
+	{:else}
+		<a href={exploreAllLink} class={buttonClass}>Explore All</a>
+	{/if}
 </div>

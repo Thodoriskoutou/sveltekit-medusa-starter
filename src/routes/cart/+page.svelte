@@ -162,7 +162,7 @@
 								href={`/product/${item.product_handle}`}
 								class="flex-shrink-0 w-40 h-52 bg-gray-100 border border-gray-200 relative overflow-hidden group"
 							>
-								<ProductMedia src={item.thumbnail} alt={item.product_title ?? item.title} label="[Image]" />
+								<ProductMedia src={item.thumbnail} alt={item.product_title ?? item.title} />
 								<div class="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
 							</a>
 
